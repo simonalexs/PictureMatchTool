@@ -237,12 +237,12 @@ class PictureMatchManager:
         cache_folder_path = config.get_cache_folder()
         all_file_path = common_utils.get_all_file_in_dir(cache_folder_path)
         if config.is_lock_contraction_ratio:
-            self.log_manager.info('固定收缩比模式，当前收缩比：' + str(config.fixed_contraction_ratio))
+            self.log_manager.info('固定收缩比模式，当前收缩比：' + str(config.fixed_contraction_ratio), config.name)
             fittest = self.find_fittest_picture(block_picture_path, all_file_path, config.fixed_contraction_ratio, threadhold_match_rate)
             return fittest
         else:
             self.log_manager.info('自动查找模式，当前收缩比范围：' + str(config.auto_contraction_ratio_range)
-                                  + ', 步长：' + str(config.auto_contraction_ratio_step))
+                                  + ', 步长：' + str(config.auto_contraction_ratio_step), config.name)
             ratio_2_match_rate_2_path = self.find_highest_match_rate_picture(block_picture_path, all_file_path, threadhold_match_rate,
                                                                              config.auto_contraction_ratio_range,
                                                                              config.auto_contraction_ratio_step)
