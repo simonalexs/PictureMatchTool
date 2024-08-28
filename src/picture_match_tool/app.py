@@ -141,7 +141,7 @@ class Config:
         self.window_name: str = ''
         """要监听的应用程序窗口 title"""
 
-        self.region: tuple[int,int,int,int] = (0,0,0,0)
+        self.region: tuple[int, int, int, int] = (0, 0, 0, 0)
         """游戏内的小图  [left距离左边, top距离上边, right距离左边, bottom距离上边]"""
 
         self.fixed_contraction_ratio: float = 1
@@ -413,7 +413,8 @@ class PictureMatchTool(toga.App):
         return box
 
     def start_all_configs_btn_handler(self, widget, **kwargs):
-        self.scheduler.add_job(self.picture_match_manager.run_all_configs, 'interval', seconds=5, id='job_all')
+        self.scheduler.add_job(self.picture_match_manager.run_all_configs, 'interval', seconds=5, id='job_all',
+                               replace_existing=True)
         if not self.scheduler.running:
             self.scheduler.start()
         self.start_all_configs_btn.enabled = False

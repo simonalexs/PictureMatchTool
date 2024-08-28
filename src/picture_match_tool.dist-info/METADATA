@@ -4,8 +4,8 @@ Name: picture_match_tool
 Formal-Name: PictureMatchTool
 App-ID: com.simonalexs.python.apps.pc.picture-match-tool
 Version: 0.0.1
-Home-page: https://pc.apps.python.simonalexs.com/picture_match_tool
-Download-URL: https://pc.apps.python.simonalexs.com/picture_match_tool
+Home-page: https://github.com/simonalexs/PictureMatchTool
+Download-URL: https://github.com/simonalexs/PictureMatchTool
 Author: SimonAlexs
-Author-email: simonalexs@pc.apps.python.simonalexs.com
-Summary: My first application
+Author-email: 1350966307@qq.com
+Summary: 图片匹配工具，依据屏幕指定区域的截图从匹配库中找到相应的图片，并存放到指定位置
