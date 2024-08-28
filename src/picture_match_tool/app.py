@@ -245,11 +245,12 @@ class PictureMatchManager:
                                   + ', 步长：' + str(config.auto_contraction_ratio_step), config.name)
             ratio_2_match_rate_2_path = self.find_highest_match_rate_picture(block_picture_path, all_file_path, threadhold_match_rate,
                                                                              config.auto_contraction_ratio_range,
-                                                                             config.auto_contraction_ratio_step)
+                                                                             config.auto_contraction_ratio_step,
+                                                                             config.name)
             return ratio_2_match_rate_2_path
 
     def find_highest_match_rate_picture(self, block_picture_path, all_file_path, threadhold_match_rate, contraction_ratio_range,
-                                        contraction_ratio_step):
+                                        contraction_ratio_step, config_name):
         """
         遍历收缩比，逐一寻找匹配度最高的图片
         """
@@ -260,6 +261,7 @@ class PictureMatchManager:
         ratio_2_match_rate_2_path = None
         for i in range(start_ratio_int, end_ratio_int + 1, step):
             contraction_ratio = float(i) / 100
+            self.log_manager.info('正在以此收缩比查找数据库：' + str(contraction_ratio), config_name)
             fittest = self.find_fittest_picture(block_picture_path, all_file_path, contraction_ratio, threadhold_match_rate)
             if fittest is None:
                 continue
