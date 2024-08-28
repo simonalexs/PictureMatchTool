@@ -1,0 +1,11 @@
+Metadata-Version: 2.1
+Briefcase-Version: 0.3.19
+Name: picture_match_tool
+Formal-Name: PictureMatchTool
+App-ID: com.simonalexs.python.apps.pc.picture-match-tool
+Version: 0.0.1
+Home-page: https://pc.apps.python.simonalexs.com/picture_match_tool
+Download-URL: https://pc.apps.python.simonalexs.com/picture_match_tool
+Author: SimonAlexs
+Author-email: simonalexs@pc.apps.python.simonalexs.com
+Summary: My first application
