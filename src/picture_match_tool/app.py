@@ -152,41 +152,41 @@ class AppConfig:
 
 class Config:
     def __init__(self, **kwargs):
-        self.name: str = kwargs["name"]
+        self.name: str = kwargs.get("name", "unknown_config")
         """配置名称"""
 
-        self.description: str = kwargs["description"]
+        self.description: str = kwargs.get("description", "")
 
-        self.enable: bool = kwargs["enable"]
+        self.enable: bool = kwargs.get("enable", False)
         """配置名称"""
 
-        self.window_name: str = kwargs["window_name"]
+        self.window_name: str = kwargs.get("window_name", "unknown_window_name")
         """要监听的应用程序窗口 title"""
 
-        self.region: list[float] = kwargs["region"]
+        self.region: list[float] = kwargs.get("region", [0.2, 0.3, 0.6, 0.7])
         """游戏内的小图  [left距离左边, top距离上边, right距离左边, bottom距离上边]"""
 
-        self.fixed_contraction_ratio: float = kwargs["fixed_contraction_ratio"]
-        """小图与原图的放缩比例"""
-
-        self.is_lock_contraction_ratio: bool = kwargs["is_lock_contraction_ratio"]
+        self.is_lock_contraction_ratio: bool = kwargs.get("is_lock_contraction_ratio", False)
         """
         不固定时，会自动在收缩比范围内遍历寻找匹配度最高的结果
-        固定时，只会以指定的 contraction_ratio 去寻找
+        固定时，只会以指定的 fixed_contraction_ratio 去寻找
         """
 
-        self.auto_contraction_ratio_range: list[float] = kwargs["auto_contraction_ratio_range"]
+        self.fixed_contraction_ratio: float = kwargs.get("fixed_contraction_ratio", 0.59)
+        """小图与原图的放缩比例"""
+
+        self.auto_contraction_ratio_range: list[float] = kwargs.get("auto_contraction_ratio_range", [0.4, 0.7])
         """
         is_lock_contraction_ratio = False 时，自动以此收缩比范围去遍历寻找结果
         """
 
-        self.auto_contraction_ratio_step: float = kwargs["auto_contraction_ratio_step"]
+        self.auto_contraction_ratio_step: float = kwargs.get("auto_contraction_ratio_step", 0.01)
         """收缩比范围的遍历步长"""
 
-        self.threadhold_match_rate: float = kwargs["threadhold_match_rate"]
+        self.threadhold_match_rate: float = kwargs.get("threadhold_match_rate", 0.8)
         """计算图片匹配度时的阈值，大于这一阈值才认为图片是匹配的"""
 
-        self.result_target_folder: str = kwargs["result_target_folder"]
+        self.result_target_folder: str = kwargs.get("result_target_folder", "data/result")
         """
         结果文件存放的文件夹（默认会以配置名称作为文件名存放）
         """
@@ -299,7 +299,6 @@ class Config:
         res = []
         for dictionary in dicts:
             cache_entity = CacheEntity(**dictionary)
-            cache_entity.__dict__ = dictionary
             res.append(cache_entity)
         return res
 
