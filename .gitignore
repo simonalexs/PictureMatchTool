@@ -6,6 +6,8 @@ __pycache__/
 # 自定义
 logs
 data/**
+!data/database
+!data/database/**
 !data/cache
 !data/cache/**
 

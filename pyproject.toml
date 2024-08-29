@@ -10,9 +10,10 @@ author_email = "simonalexs@pc.apps.python.simonalexs.com"
 
 [tool.briefcase.app.picture_match_tool]
 formal_name = "PictureMatchTool"
-description = "My first application"
-long_description = """More details about the app should go here.
+description = ""
+long_description = """
 """
+url = "https://github.com/simonalexs/PictureMatchTool"
 icon = "icons/app"
 sources = [
     "src/picture_match_tool",
