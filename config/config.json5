@@ -8,10 +8,10 @@
       "region": [0.414, 0.798, 0.439, 0.833],
       "is_lock_contraction_ratio": false,
       "fixed_contraction_ratio": 0.58,
-      "auto_contraction_ratio_range": [0.40, 0.70],
+      "auto_contraction_ratio_range": [0.4, 0.7],
       "auto_contraction_ratio_step": 0.02,
       "threadhold_match_rate": 0.8,
-      "result_target_folder": "/data/result",
+      "result_target_folder": "data/result"
     }
   ]
 }

@@ -34,7 +34,6 @@ except ImportError:
 
 symbol = '/'
 
-
 def cv2Pil(img):
     return Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
 
@@ -70,11 +69,11 @@ def cal_fittest_resize_rate(image_path, block_path):
 
 class LogManager:
     def __init__(self, app_path: Path):
-        self.__app_path = app_path
+        self.app_path = app_path
 
     def get_app_folder(self):
         # self.__app_path.parent.parent 此为项目根目录
-        return str(self.__app_path.parent.parent)
+        return str(self.app_path.parent.parent)
 
     def get_app_config_path(self):
         return os.path.join(self.get_app_folder(), 'config', 'config.json5')
@@ -131,6 +130,9 @@ class LogManager:
         return file_path
 
 
+log_manager = LogManager(Path())
+
+
 class CacheEntity:
     def __init__(self, cache_block_file_name, threadhold_match_rate, contraction_ratio, match_rate, relative_result_picture_path):
         self.cache_block_file_name: str = cache_block_file_name
@@ -149,51 +151,48 @@ class AppConfig:
 
 
 class Config:
-    def __init__(self, name, log_manager: LogManager):
-        self.log_manager = log_manager
-
-        self.name: str = name
+    def __init__(self, **kwargs):
+        self.name: str = kwargs["name"]
         """配置名称"""
 
-        self.description: str = ''
+        self.description: str = kwargs["description"]
 
-        self.enable: bool = False
+        self.enable: bool = kwargs["enable"]
         """配置名称"""
 
-        self.window_name: str = ''
+        self.window_name: str = kwargs["window_name"]
         """要监听的应用程序窗口 title"""
 
-        self.region: list[float] = [0, 0, 0, 0]
+        self.region: list[float] = kwargs["region"]
         """游戏内的小图  [left距离左边, top距离上边, right距离左边, bottom距离上边]"""
 
-        self.fixed_contraction_ratio: float = 1
+        self.fixed_contraction_ratio: float = kwargs["fixed_contraction_ratio"]
         """小图与原图的放缩比例"""
 
-        self.is_lock_contraction_ratio: bool = False
+        self.is_lock_contraction_ratio: bool = kwargs["is_lock_contraction_ratio"]
         """
         不固定时，会自动在收缩比范围内遍历寻找匹配度最高的结果
         固定时，只会以指定的 contraction_ratio 去寻找
         """
 
-        self.auto_contraction_ratio_range: list[float] = [0.40, 1.00]
+        self.auto_contraction_ratio_range: list[float] = kwargs["auto_contraction_ratio_range"]
         """
         is_lock_contraction_ratio = False 时，自动以此收缩比范围去遍历寻找结果
         """
 
-        self.auto_contraction_ratio_step: float = 0.01
+        self.auto_contraction_ratio_step: float = kwargs["auto_contraction_ratio_step"]
         """收缩比范围的遍历步长"""
 
-        self.threadhold_match_rate: float = 0.8
+        self.threadhold_match_rate: float = kwargs["threadhold_match_rate"]
         """计算图片匹配度时的阈值，大于这一阈值才认为图片是匹配的"""
 
-        # TODO-high： 处理这个相对路径还是绝对路径的问题，使用时转换为绝对路径 。2024/08/29 12:04:40
-        self.result_target_folder: str = self.log_manager.get_app_folder() + symbol + 'data' + symbol + 'result'
+        self.result_target_folder: str = kwargs["result_target_folder"]
         """
         结果文件存放的文件夹（默认会以配置名称作为文件名存放）
         """
 
     def __get_base_folder(self):
-        path = os.path.join(self.log_manager.get_app_folder(), 'data')
+        path = os.path.join(log_manager.get_app_folder(), 'data')
         if not os.path.exists(path):
             os.makedirs(path)
         return path
@@ -220,7 +219,7 @@ class Config:
         folder = self.result_target_folder
         if folder.find(":/") == -1 and folder.find(":\\") == -1:
             # 相对路径
-            folder = self.get_absolute_path(folder)
+            folder = common_utils.get_absolute_path_from_relative(folder, log_manager.get_app_folder())
         if not os.path.exists(folder):
             os.makedirs(folder)
         return os.path.join(folder, self.name + '.png')
@@ -238,12 +237,6 @@ class Config:
         mouse_top = int((top + bottom) / 2)
         return mouse_left, mouse_top
 
-    def get_relative_path(self, absolute_path: str):
-        return absolute_path.replace(self.__get_base_folder(), '')
-
-    def get_absolute_path(self, relative_path: str) -> str:
-        return os.path.join(self.__get_base_folder(), relative_path)
-
     def add_cache(self, ratio_2_match_rate_2_path: tuple[float, float, str], block_picture_path: str):
         cache_folder = self.get_cache_folder()
         # 复制 block文件到缓存文件夹
@@ -257,7 +250,7 @@ class Config:
             self.threadhold_match_rate,
             ratio_2_match_rate_2_path[0],
             ratio_2_match_rate_2_path[1],
-            self.get_relative_path(ratio_2_match_rate_2_path[2]))
+            common_utils.get_relative_path(ratio_2_match_rate_2_path[2], log_manager.get_app_folder()))
         cache_datas.append(data)
         self.__write_cache_file(cache_datas)
 
@@ -276,7 +269,7 @@ class Config:
             # 两张图片一样，判断缓存里的值是否有效
             for cache_data in cache_datas:
                 if cache_data.cache_block_file_name == file_name and cache_data.threadhold_match_rate == self.threadhold_match_rate:
-                    result_picture_path = self.get_absolute_path(cache_data.relative_result_picture_path)
+                    result_picture_path = common_utils.get_absolute_path_from_relative(cache_data.relative_result_picture_path)
                     if os.path.exists(result_picture_path):
                         return (cache_data.contraction_ratio, cache_data.match_rate, result_picture_path)
         return None
@@ -305,17 +298,19 @@ class Config:
         dicts = json.loads(content)
         res = []
         for dictionary in dicts:
-            res.append(CacheEntity(**dictionary))
+            cache_entity = CacheEntity(**dictionary)
+            cache_entity.__dict__ = dictionary
+            res.append(cache_entity)
         return res
 
     def __write_cache_file(self, data: list[CacheEntity]):
         with open(self.__get_cache_list_file_path(), 'w') as file:
-            file.write(json.dumps(data, indent=4))
+            file.write(json.dumps(data.__dict__, indent=4))
 
 
 class PictureMatchManager:
-    def __init__(self, logManager: LogManager):
-        self.log_manager = logManager
+    def __init__(self):
+        pass
 
     def run_all_configs(self):
         start = time.time_ns() // 1000000
@@ -325,11 +320,11 @@ class PictureMatchManager:
                     t1 = time.time_ns() // 1000000
                     status, message = self.do_run_config(config)
                     t2 = time.time_ns() // 1000000
-                    self.log_manager.info(message + '（耗时：' + str(t2 - t1) + ' ms', config.name)
+                    log_manager.info(message + '（耗时：' + str(t2 - t1) + ' ms', config.name)
                 except Exception as e:
-                    self.log_manager.error(str(e), config.name)
+                    log_manager.error(str(e), config.name)
         end = time.time_ns() // 1000000
-        self.log_manager.info(f"总耗时：{str(end - start)} ms", '所有配置')
+        log_manager.info(f"总耗时：{str(end - start)} ms", 'configs')
 
     def do_cal_picture_match_rate(self, picture_block_path, img_file_path, contraction_ratio=1.0):
         """
@@ -351,20 +346,20 @@ class PictureMatchManager:
 
     def find_picture_in_db(self, block_picture_path, config: Config):
         # 先从缓存中获取
-        self.log_manager.info('查找缓存...', config.name)
+        log_manager.info('查找缓存...', config.name)
         result_from_cache = config.get_result_from_cache(block_picture_path)
         if result_from_cache is not None:
-            self.log_manager.info('  缓存中已找到', config.name)
+            log_manager.info('  缓存中已找到', config.name)
             return result_from_cache
         # 缓存中没有，从数据库中遍历
-        self.log_manager.info('  缓存中未找到，开始遍历数据库', config.name)
+        log_manager.info('  缓存中未找到，开始遍历数据库', config.name)
         database_folder_path = config.get_database_folder()
-        all_file_path = common_utils.get_all_file_in_dir(database_folder_path)
+        all_file_path = common_utils.get_all_file_in_dir(database_folder_path, log_manager.get_app_folder())
         if config.is_lock_contraction_ratio:
-            self.log_manager.info('固定收缩比模式，当前收缩比：' + str(config.fixed_contraction_ratio), config.name)
+            log_manager.info('固定收缩比模式，当前收缩比：' + str(config.fixed_contraction_ratio), config.name)
             ratio_2_match_rate_2_path = self.find_fittest_picture(block_picture_path, all_file_path, config.fixed_contraction_ratio, config.threadhold_match_rate)
         else:
-            self.log_manager.info('自动查找模式，当前收缩比范围：' + str(config.auto_contraction_ratio_range)
+            log_manager.info('自动查找模式，当前收缩比范围：' + str(config.auto_contraction_ratio_range)
                                   + ', 步长：' + str(config.auto_contraction_ratio_step), config.name)
             ratio_2_match_rate_2_path = self.find_highest_match_rate_picture(block_picture_path, all_file_path, config.threadhold_match_rate,
                                                                              config.auto_contraction_ratio_range,
@@ -387,7 +382,7 @@ class PictureMatchManager:
         ratio_2_match_rate_2_path = None
         for i in range(start_ratio_int, end_ratio_int + 1, step):
             contraction_ratio = float(i) / 100
-            self.log_manager.info('正在以此收缩比查找数据库：' + str(contraction_ratio), config_name)
+            log_manager.info('正在以此收缩比查找数据库：' + str(contraction_ratio), config_name)
             fittest = self.find_fittest_picture(block_picture_path, all_file_path, contraction_ratio, threadhold_match_rate)
             if fittest is None:
                 continue
@@ -412,37 +407,18 @@ class PictureMatchManager:
         return (contraction_ratio, res_rate, res_file_path)
 
     def read_app_config(self):
-        app_config_path = self.log_manager.get_app_config_path()
+        app_config_path = log_manager.get_app_config_path()
         if not os.path.exists(app_config_path):
             with open(app_config_path, 'w') as file:
-                file.write(json.dumps(AppConfig([]), indent=4))
+                file.write(json.dumps(AppConfig([]).__dict__, indent=4))
         with open(app_config_path, 'r') as file:
             app_config_dict: dict = json.loads(file.read())
             app_config = AppConfig(app_config_dict.get("configs"))
         return app_config
 
     def save_app_config(self, app_config: AppConfig):
-        with open(self.log_manager.get_app_config_path(), 'w') as file:
-            file.write(json.dumps(app_config, indent=4))
-
-    def read_configs(self) -> list[Config]:
-        app_config = self.read_app_config()
-        return app_config.configs
-
-        configs: list[Config] = []
-        little_config = Config('小饰品', self.log_manager)
-        little_config.window_name = '炉石传说'
-        little_config.enable = True
-        little_config.region = [0.414, 0.798, 0.439, 0.833]
-        little_config.is_lock_contraction_ratio = False
-        # little_config.fixed_contraction_ratio = 0.58
-        little_config.auto_contraction_ratio_range = (0.50, 0.70)
-        little_config.auto_contraction_ratio_step = 0.02
-
-        little_config.result_target_folder = self.log_manager.get_app_folder() + symbol + 'data' + symbol + 'result'
-        configs.append(little_config)
-        # 从 json 配置文件读取
-        return configs
+        with open(log_manager.get_app_config_path(), 'w') as file:
+            file.write(json.dumps(app_config.__dict__, indent=4))
 
     def save_config(self, config_update: Config):
         # TODO-low：UI 界面 新建、修改 config  。2024/08/29 11:54:55
@@ -489,9 +465,9 @@ class PictureMatchTool(toga.App):
 
     def __init__(self, **options):
         super().__init__(**options)
+        log_manager.app_path = self.app.paths.app
         self.scheduler = BackgroundScheduler(timezone='MST')
-        self.log_manager = LogManager(self.app.paths.app)
-        self.picture_match_manager = PictureMatchManager(self.log_manager)
+        self.picture_match_manager = PictureMatchManager()
 
         # Find the name of the module that was used to start the app
         app_module = sys.modules['__main__'].__package__
@@ -563,13 +539,13 @@ class PictureMatchTool(toga.App):
             self.scheduler.start()
         self.start_all_configs_btn.enabled = False
         self.stop_all_configs_btn.enabled = True
-        self.log_manager.info('开始识别', 'configs')
+        log_manager.info('开始识别', 'configs')
 
     def stop_all_configs_btn_handler(self, widget, **kwargs):
         self.scheduler.remove_job('job_all')
         self.start_all_configs_btn.enabled = True
         self.stop_all_configs_btn.enabled = False
-        self.log_manager.info('已停止识别', 'configs')
+        log_manager.info('已停止识别', 'configs')
 
     def create_body_box(self):
         box = toga.Box()
@@ -587,7 +563,7 @@ class PictureMatchTool(toga.App):
             await asyncio.sleep(1)
 
     async def do_refresh_footer_log(self, log_nums=10):
-        logs = self.log_manager.get_log('info')
+        logs = log_manager.get_log('info')
         new_show_logs = logs[(-log_nums - 1):]
 
         labels = self.footer_box.children
@@ -613,4 +589,6 @@ def main():
     return PictureMatchTool()
 
 # TODO-high  2024/08/29 08:01:21
-#  3. 准备数据库
+#  获取数据库（小饰品、大饰品）
+#  测试缓存能否写入，能否正常读取，能否正常应用
+#  测试快捷方式管不管用
