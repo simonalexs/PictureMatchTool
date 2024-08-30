@@ -4,7 +4,7 @@
       "name": "小饰品",
       "description": "",
       "enable": true,
-      "window_name": "炉石传说",
+      "window_name": "炉石传说,HearthStone",
       "region": [0.414, 0.798, 0.439, 0.833],
       "is_lock_contraction_ratio": false,
       "fixed_contraction_ratio": 0.58,

@@ -8,6 +8,7 @@ logs
 data/**
 !data/database
 !data/database/**
+data/database/原版图片-未处理
 !data/cache
 !data/cache/**
 

@@ -161,7 +161,7 @@ class Config:
         """配置名称"""
 
         self.window_name: str = kwargs.get("window_name", "unknown_window_name")
-        """要监听的应用程序窗口 title"""
+        """要监听的应用程序窗口 title ，当可能有多种名称时可使用“,”分隔（例如中文名和英文名） """
 
         self.region: list[float] = kwargs.get("region", [0.2, 0.3, 0.6, 0.7])
         """游戏内的小图  [left距离左边, top距离上边, right距离左边, bottom距离上边]"""
@@ -348,17 +348,17 @@ class PictureMatchManager:
         log_manager.info('查找缓存...', config.name)
         result_from_cache = config.get_result_from_cache(block_picture_path)
         if result_from_cache is not None:
-            log_manager.info('  缓存中已找到', config.name)
+            log_manager.info('缓存中已找到', config.name)
             return result_from_cache
         # 缓存中没有，从数据库中遍历
-        log_manager.info('  缓存中未找到，开始遍历数据库', config.name)
+        log_manager.info('缓存中未找到，开始遍历数据库', config.name)
         database_folder_path = config.get_database_folder()
         all_file_path = common_utils.get_all_file_in_dir(database_folder_path, log_manager.get_app_folder())
         if config.is_lock_contraction_ratio:
             log_manager.info('固定收缩比模式，当前收缩比：' + str(config.fixed_contraction_ratio), config.name)
             ratio_2_match_rate_2_path = self.find_fittest_picture(block_picture_path, all_file_path, config.fixed_contraction_ratio, config.threadhold_match_rate)
         else:
-            log_manager.info('自动查找模式，当前收缩比范围：' + str(config.auto_contraction_ratio_range)
+            log_manager.info('自动查找模式，要扫描的收缩比范围：' + str(config.auto_contraction_ratio_range)
                                   + ', 步长：' + str(config.auto_contraction_ratio_step), config.name)
             ratio_2_match_rate_2_path = self.find_highest_match_rate_picture(block_picture_path, all_file_path, config.threadhold_match_rate,
                                                                              config.auto_contraction_ratio_range,
@@ -381,7 +381,6 @@ class PictureMatchManager:
         ratio_2_match_rate_2_path = None
         for i in range(start_ratio_int, end_ratio_int + 1, step):
             contraction_ratio = float(i) / 100
-            log_manager.info('正在以此收缩比查找数据库：' + str(contraction_ratio), config_name)
             fittest = self.find_fittest_picture(block_picture_path, all_file_path, contraction_ratio, threadhold_match_rate)
             if fittest is None:
                 continue
@@ -435,7 +434,7 @@ class PictureMatchManager:
             return False, '未找到窗口[' + config.window_name + ']'
         res_windows = []
         for window in windows:
-            if window.title == config.window_name:
+            if config.window_name.split(',').count(window.title) > 0:
                 res_windows.append(window)
         if len(res_windows) == 0:
             return False, '未找到窗口[' + config.window_name + ']'
@@ -443,7 +442,9 @@ class PictureMatchManager:
             return False, '找到' + str(len(res_windows)) + '个名叫[' + config.window_name + ']的窗口'
         window = res_windows[0]
         if window.isMinimized:
-            return False, '窗口已最小化，无法截图'
+            return False, '窗口已最小化，终止识别'
+        # if not window.isActive:
+        #     return False, '窗口未激活，终止识别'
         # 截取图片
         png_path = config.get_temp_folder() + symbol + config.name + '.png'
         real_region = config.get_real_region_by_config(config.region, window)
@@ -456,7 +457,8 @@ class PictureMatchManager:
             return False, '未找到结果'
         else:
             shutil.copyfile(ratio_2_match_rate_2_path[2], config.get_result_target_path())
-            message = '已找到结果' + ratio_2_match_rate_2_path[2] + ', 收缩比：' + str(ratio_2_match_rate_2_path[0]) + ', 匹配度：' + str(ratio_2_match_rate_2_path[1])
+            message = f'结果已找到，收缩比：{str(ratio_2_match_rate_2_path[0])}, 匹配度：{str(ratio_2_match_rate_2_path[1])}' \
+                      f'，已保存到：{config.get_result_target_path()}（找到的目标路径为：{ratio_2_match_rate_2_path[2]}）'
             return True, message
 
 
@@ -532,13 +534,14 @@ class PictureMatchTool(toga.App):
         return box
 
     def start_all_configs_btn_handler(self, widget, **kwargs):
-        self.scheduler.add_job(self.picture_match_manager.run_all_configs, 'interval', seconds=5, id='job_all',
+        scan_interval_second = 5
+        self.scheduler.add_job(self.picture_match_manager.run_all_configs, 'interval', seconds=scan_interval_second, id='job_all',
                                replace_existing=True)
         if not self.scheduler.running:
             self.scheduler.start()
         self.start_all_configs_btn.enabled = False
         self.stop_all_configs_btn.enabled = True
-        log_manager.info('开始识别', 'configs')
+        log_manager.info(f'开始识别任务（首次执行会在{str(scan_interval_second)}秒后开始）', 'configs')
 
     def stop_all_configs_btn_handler(self, widget, **kwargs):
         self.scheduler.remove_job('job_all')
@@ -576,9 +579,6 @@ class PictureMatchTool(toga.App):
                 labels[i - 1].text = log
             i = i + 1
 
-    def add_config_button_handler(self):
-        pass
-
 
 def main():
     """
@@ -588,6 +588,10 @@ def main():
     return PictureMatchTool()
 
 # TODO-high  2024/08/29 08:01:21
-#  获取数据库（小饰品、大饰品）
 #  测试缓存能否写入，能否正常读取，能否正常应用
 #  测试快捷方式管不管用
+#  日志界面显示大一些？
+#  显示结果图片
+
+# TODO-high： 等国服回来后，试试能不能申请调用官方的api获取图片数据  https://develop.battle.net/documentation/hearthstone/game-data-apis 。2024/08/30 09:37:01
+

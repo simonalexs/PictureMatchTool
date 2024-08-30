@@ -32,6 +32,9 @@ def get_custom_shortcut_target(filepath, app_folder):
 
 
 def get_all_file_in_dir(folder_path, app_folder):
+    """
+    里面没有快捷方式时，就不用传 app_folder 这个参数，因为不会涉及到“相对路径”
+    """
     file_paths = []
     if os.path.isfile(folder_path):
         file_paths.append(folder_path)
