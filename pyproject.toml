@@ -17,6 +17,8 @@ url = "https://github.com/simonalexs/PictureMatchTool"
 icon = "icons/app"
 sources = [
     "src/picture_match_tool",
+    "config",
+    "data/database",
 ]
 test_sources = [
     "tests",

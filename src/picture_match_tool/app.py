@@ -72,8 +72,12 @@ class LogManager:
         self.app_path = app_path
 
     def get_app_folder(self):
-        # self.__app_path.parent.parent 此为项目根目录
-        return str(self.app_path.parent.parent)
+        parent_path = self.app_path.parent
+        if parent_path.name == 'app':
+            # 打包之后自定义的资源文件存放在这个目录下，所以就把这里定义为 app_folder 吧
+            return str(parent_path)
+        # 开发环境下，再上一级才是根目录
+        return str(parent_path.parent)
 
     def get_app_config_path(self):
         return os.path.join(self.get_app_folder(), 'config', 'config.json5')
@@ -85,11 +89,6 @@ class LogManager:
         self.__write_log('error', msg, config_name)
         self.__write_log('info', msg, config_name)
 
-    def get_log_time(self, log_line: str):
-        first = log_line.index(' ')
-        second = log_line.index(' ', first + 1)
-        return log_line[0:second]
-
     def get_log(self, type) -> list[str]:
         file_path = self.__get_log_path(type)
         result = []
@@ -98,10 +97,12 @@ class LogManager:
         with open(file_path, 'r') as file:
             line = file.readline()
             while line:
-                line = file.readline()
                 if line.endswith('\n'):
                     line = line.replace('\n', '')
+                if line == '':
+                    continue
                 result.append(line)
+                line = file.readline()
         return result
 
     def __write_log(self, type, content, config_name):
