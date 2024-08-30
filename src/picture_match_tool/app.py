@@ -2,6 +2,7 @@
 my first
 """
 import json
+import webbrowser
 
 from toga.style import Pack
 
@@ -22,9 +23,11 @@ import os
 import cv2
 import numpy as np
 import shutil
+import pyperclip
 from apscheduler.schedulers.background import BackgroundScheduler
 from datetime import datetime
 import threading
+from functools import partial
 try:
     from importlib import metadata as importlib_metadata
 except ImportError:
@@ -65,6 +68,20 @@ def cal_fittest_resize_rate(image_path, block_path):
             if match_rate > max_match_rate[1]:
                 max_match_rate = (factor, match_rate)
     return max_match_rate
+
+
+def copy_to_clipboard_for_button(widget, *args, content: str, **kwargs):
+    """
+    toga.button 的 on_press 可以用这种方法传参
+    使用方： from functools import partial
+           on_press=partial(function_name, content='123')
+    https://github.com/beeware/toga/discussions/1987
+    """
+    copy_to_clipboard(content)
+
+
+def copy_to_clipboard(content):
+    pyperclip.copy(content)
 
 
 class LogManager:
@@ -532,6 +549,12 @@ class PictureMatchTool(toga.App):
         self.stop_all_configs_btn = toga.Button('停止自动识别', on_press=self.stop_all_configs_btn_handler)
         self.stop_all_configs_btn.enabled = False
         box.add(self.stop_all_configs_btn)
+
+        box.add(toga.Label('空白，用来占用空间', style=Pack(flex=3, visibility='hidden')))
+
+        self.picture_source_btn = toga.Button('数据库图片来源：旅法师营地@Bennidge', style=Pack(flex=1),
+                                              on_press=lambda widget: webbrowser.open('https://www.iyingdi.com/tz/people/55547'))
+        box.add(self.picture_source_btn)
         return box
 
     def start_all_configs_btn_handler(self, widget, **kwargs):
@@ -551,9 +574,26 @@ class PictureMatchTool(toga.App):
         log_manager.info('已停止识别', 'configs')
 
     def create_body_box(self):
-        box = toga.Box()
+        body = toga.Box(style=Pack(padding_top=20))
+        body.style.direction = COLUMN
 
-        return box
+        header_names = ["配置名称", "窗口名", "启用状态", "结果图存储路径"]
+        self.table_box_column_widths = [100, 200, 100, 500]
+
+        header_box = toga.Box()
+        for i in range(len(header_names)):
+            header_box.add(toga.Label(header_names[i], style=Pack(font_weight='bold', width=self.table_box_column_widths[i])))
+        body.add(header_box)
+
+        self.table_box = toga.Box()
+        self.table_box.style.direction = COLUMN
+        self.refresh_table_box()
+        body.add(self.table_box)
+
+        # my_image = toga.Image(self.paths.app / "brutus.png")
+        # view = toga.ImageView(my_image)
+
+        return body
 
     def create_footer_box(self):
         self.footer_box = toga.Box()
@@ -580,6 +620,22 @@ class PictureMatchTool(toga.App):
                 labels[i - 1].text = log
             i = i + 1
 
+    def refresh_table_box(self):
+        configs = self.picture_match_manager.read_app_config().configs
+        self.table_box.clear()
+        for i in range(len(configs)):
+            config = configs[i]
+            row = toga.Box(
+                style=Pack(padding_top=10),
+                children=[
+                    toga.Label(config.name, style=Pack(width=self.table_box_column_widths[0])),
+                    toga.Label(config.window_name, style=Pack(width=self.table_box_column_widths[1])),
+                    toga.Label('已启用' if config.enable else '已禁用', style=Pack(width=self.table_box_column_widths[2])),
+                    toga.TextInput(value=config.get_result_target_path(), style=Pack(width=self.table_box_column_widths[3]), readonly=True)
+                ]
+            )
+            self.table_box.add(row)
+
 
 def main():
     """
@@ -593,6 +649,9 @@ def main():
 #  测试快捷方式管不管用
 #  日志界面显示大一些？
 #  显示结果图片
+#  配置文件可添加：【可能需要调整 app_config 的读取方式，不能放在 log_manager 里了】
+#        自动扫描的时间间隔
+#        窗口未激活时是否扫描（默认False）
 
 # TODO-high： 等国服回来后，试试能不能申请调用官方的api获取图片数据  https://develop.battle.net/documentation/hearthstone/game-data-apis 。2024/08/30 09:37:01
 

@@ -7,11 +7,24 @@
       "window_name": "炉石传说,HearthStone",
       "region": [0.414, 0.798, 0.439, 0.833],
       "is_lock_contraction_ratio": false,
-      "fixed_contraction_ratio": 0.58,
+      "fixed_contraction_ratio": 1,
       "auto_contraction_ratio_range": [0.4, 0.7],
-      "auto_contraction_ratio_step": 0.02,
-      "threadhold_match_rate": 0.8,
-      "result_target_folder": "data/result"
+      "auto_contraction_ratio_step": 0.01,
+      "threadhold_match_rate": 0.9,
+      "result_target_folder": "data\\result"
+    },
+    {
+      "name": "大饰品",
+      "description": "",
+      "enable": true,
+      "window_name": "炉石传说,HearthStone",
+      "region": [0.414, 0.798, 0.439, 0.833],
+      "is_lock_contraction_ratio": false,
+      "fixed_contraction_ratio": 1,
+      "auto_contraction_ratio_range": [0.4, 0.7],
+      "auto_contraction_ratio_step": 0.01,
+      "threadhold_match_rate": 0.9,
+      "result_target_folder": "data\\result"
     }
   ]
 }
