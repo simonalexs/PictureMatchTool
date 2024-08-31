@@ -1,7 +1,6 @@
 import json
 import os
 import sys
-import win32com.client
 
 from src.picture_match_tool.app import CacheEntity, AppConfig
 from src.picture_match_tool.utils import common_utils
@@ -19,4 +18,14 @@ print(a[-10:])
 
 for i in range(3):
     print(i)
+
+class CustomEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, CacheEntity):
+            return obj.__dict__
+        return json.JSONEncoder.default(self, obj)
+
+p: list[CacheEntity] = [CacheEntity('1', 1, 1, 1, '2')]
+print(json.dumps(p, cls=CustomEncoder))
+# print(json.dumps(p))
 

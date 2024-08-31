@@ -8,8 +8,8 @@
       "region": [0.414, 0.798, 0.439, 0.833],
       "is_lock_contraction_ratio": false,
       "fixed_contraction_ratio": 1,
-      "auto_contraction_ratio_range": [0.4, 0.7],
-      "auto_contraction_ratio_step": 0.01,
+      "auto_contraction_ratio_range": [0.1, 0.4],
+      "auto_contraction_ratio_step": 0.03,
       "threadhold_match_rate": 0.9,
       "result_target_folder": "data\\result"
     },
@@ -18,11 +18,11 @@
       "description": "",
       "enable": true,
       "window_name": "炉石传说,HearthStone",
-      "region": [0.414, 0.798, 0.439, 0.833],
+      "region": [0.375, 0.734, 0.4, 0.764],
       "is_lock_contraction_ratio": false,
       "fixed_contraction_ratio": 1,
-      "auto_contraction_ratio_range": [0.4, 0.7],
-      "auto_contraction_ratio_step": 0.01,
+      "auto_contraction_ratio_range": [0.1, 0.4],
+      "auto_contraction_ratio_step": 0.03,
       "threadhold_match_rate": 0.9,
       "result_target_folder": "data\\result"
     }
