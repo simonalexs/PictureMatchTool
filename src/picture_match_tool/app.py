@@ -164,8 +164,7 @@ class LogManager:
 
 class LockInfo:
     def __init__(self):
-        # 默认为 True，等加载完数据之后，再变为 False
-        self.is_loading_data = True
+        self.is_loading_data = False
 
 
 log_manager = LogManager(Path())
@@ -388,7 +387,7 @@ class PictureMatchManager:
     def load_db_pictures(self):
         if lock_info.is_loading_data:
             log_manager.info(f'已有加载数据的任务，请稍后再试', 'load_db_pictures')
-            return None
+            return
         lock_info.is_loading_data = True
         try:
             log_manager.info(f'开始加载图片库', 'load_db_pictures')
@@ -460,6 +459,9 @@ class PictureMatchManager:
         self.save_app_config(app_config)
 
     def run_all_configs(self):
+        while lock_info.is_loading_data:
+            log_manager.info('等待后台数据加载完毕...', 'configs')
+            time.sleep(1)
         start = time.time_ns() // 1000000
         for config in self.app_config.configs:
             if config.enable:
@@ -671,8 +673,10 @@ class PictureMatchTool(toga.App):
         self.scheduler.add_job(self.load_data, 'date', id='load_data')
         self.scheduler.start()
 
-    def load_data(self):
-        lock_info.is_loading_data = False
+    def load_data(self, widget=None, **kwargs):
+        if lock_info.is_loading_data:
+            log_manager.info(f'已有加载数据的任务，请稍后再试', 'load_data')
+            return
         self.picture_match_manager.load_db_pictures()
         self.picture_match_manager.load_cache_pictures()
 
@@ -709,7 +713,11 @@ class PictureMatchTool(toga.App):
         self.stop_all_configs_btn.enabled = False
         box.add(self.stop_all_configs_btn)
 
-        box.add(toga.Label('空白，用来占用空间', style=Pack(flex=3, visibility='hidden')))
+        box.add(toga.Label('空白，用来占用空间', style=Pack(flex=1, visibility='hidden')))
+
+        box.add(toga.Button('重新加载数据', style=Pack(flex=1), on_press=self.load_data))
+
+        box.add(toga.Label('空白，用来占用空间', style=Pack(flex=1, visibility='hidden')))
 
         self.picture_source_btn = toga.Button('数据库图片来源：旅法师营地@Bennidge', style=Pack(flex=1),
                                               on_press=lambda widget: webbrowser.open(
