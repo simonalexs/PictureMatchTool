@@ -16,7 +16,7 @@
       "fixed_contraction_ratio": 1,
       "auto_contraction_ratio_range": [0.1, 0.4],
       "auto_contraction_ratio_step": 0.03,
-      "threadhold_match_rate": 0.9,
+      "threadhold_match_rate": 0.85,
       "result_target_folder": "data\\result"
     },
     {
@@ -30,7 +30,7 @@
       "fixed_contraction_ratio": 1,
       "auto_contraction_ratio_range": [0.1, 0.4],
       "auto_contraction_ratio_step": 0.03,
-      "threadhold_match_rate": 0.9,
+      "threadhold_match_rate": 0.85,
       "result_target_folder": "data\\result"
     }
   ]
