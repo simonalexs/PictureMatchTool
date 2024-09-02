@@ -53,3 +53,11 @@ def get_all_file_in_dir(folder_path, app_folder):
         else:
             file_paths.append(sub_path)
     return file_paths
+
+
+def get_image_sub_region(height, width, region):
+    region_left = int(width * region[0])
+    region_top = int(height * region[1])
+    region_right = int(width * region[2])
+    region_bottom = int(height * region[3])
+    return region_left, region_top, region_right, region_bottom

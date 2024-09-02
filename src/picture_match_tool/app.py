@@ -183,7 +183,11 @@ class CacheEntity:
 
 
 class AppConfig:
-    def __init__(self, config_dict_list: list[dict]):
+    def __init__(self, config_dict_list: list[dict], scan_interval_seconds=5, enable_cache=True, scan_when_window_inactive=False):
+        self.scan_interval_seconds: int = scan_interval_seconds
+        self.enable_cache: bool = enable_cache
+        self.scan_when_window_inactive: bool = scan_when_window_inactive
+
         self.configs: list[Config] = []
         if config_dict_list is not None:
             for config_dict in config_dict_list:
@@ -205,6 +209,9 @@ class Config:
 
         self.region: list[float] = kwargs.get("region", [0.2, 0.3, 0.6, 0.7])
         """游戏内的小图  [left距离左边, top距离上边, right距离左边, bottom距离上边]"""
+
+        self.db_picture_valid_region: list[float] = kwargs.get("db_picture_valid_region", [0, 0, 1, 1])
+        """图片库中图片的有效匹配区域，用于和游戏内的小图匹配时避免无效匹配  [left距离左边, top距离上边, right距离左边, bottom距离上边]"""
 
         self.is_lock_contraction_ratio: bool = kwargs.get("is_lock_contraction_ratio", False)
         """
@@ -299,14 +306,14 @@ class Config:
         if os.path.exists(cache_folder):
             shutil.rmtree(cache_folder)
 
-    def get_result_from_cache(self, block_picture_path: str):
+    def get_result_from_cache(self, block):
         cache_folder = self.get_cache_folder()
         cache_datas = self.__read_cache_file()
         for file_name in os.listdir(cache_folder):
             if not file_name.endswith(".png"):
                 continue
             file_path = os.path.join(cache_folder, file_name)
-            if not self.is_picture_in_cache(file_path, block_picture_path):
+            if not self.is_picture_in_cache(file_path, block):
                 continue
             # 两张图片一样，判断缓存里的值是否有效
             for cache_data in cache_datas:
@@ -318,11 +325,10 @@ class Config:
             os.remove(file_path)
         return None
 
-    def is_picture_in_cache(self, pic1_path, pic2_path):
+    def is_picture_in_cache(self, pic1_path, block):
         pic1 = pil2Cv(Image.open(pic1_path))
-        pic2 = pil2Cv(Image.open(pic2_path))
-        if pic1.shape == pic2.shape:
-            diff = cv2.subtract(pic1, pic2)
+        if pic1.shape == block.shape:
+            diff = cv2.subtract(pic1, block)
             if is_pixel_zero(diff):
                 return True
         return False
@@ -354,13 +360,74 @@ class Config:
             file.write(json.dumps(dicts, indent=4, ensure_ascii=False, cls=CustomEncoder))
 
 
+class DbPicture:
+    def __init__(self):
+        self.path: str = ''
+        self.image = None
+        self.height = None
+        self.width = None
+
+
 class PictureMatchManager:
     def __init__(self):
-        pass
+        self.app_config = self.__read_app_config()
+        self.db_pictures: dict = {}
+        self.load_db_pictures()
+
+    def __read_app_config(self):
+        app_config_path = log_manager.get_app_config_path()
+        if not os.path.exists(app_config_path):
+            with open(app_config_path, 'w') as file:
+                file.write(json.dumps(AppConfig([]).__dict__, indent=4, ensure_ascii=False))
+        with open(app_config_path, 'r') as file:
+            app_config_dict: dict = json.loads(file.read())
+            app_config = AppConfig(app_config_dict.get("configs"))
+        return app_config
+
+    def load_db_pictures(self):
+        log_manager.info(f'开始加载图片库', 'load_db_pictures')
+        start = time.time_ns() // 1000000
+        for config in self.app_config.configs:
+            self.db_pictures[config.name].clear()
+            pictures: list[DbPicture] = []
+            database_folder_path = config.get_database_folder()
+            all_file_path = common_utils.get_all_file_in_dir(database_folder_path, log_manager.get_app_folder())
+            for file_path in all_file_path:
+                if not file_path.endswith('.png'):
+                    continue
+                img = pil2Cv(Image.open(file_path))
+                # 获取有效匹配区域
+                valid_region = common_utils.get_image_sub_region(img.shape[:2][0], img.shape[:2][1], config.db_picture_valid_region)
+                valid_picture = img[valid_region[0]:valid_region[2], valid_region[1]:valid_region[3]]
+                valid_height, valid_width = valid_picture.shape[:2]
+                # 存入内存
+                picture = DbPicture()
+                picture.path = file_path
+                picture.image = valid_picture
+                picture.height = valid_height
+                picture.width = valid_width
+                pictures.append(picture)
+            self.db_pictures[config.name] = pictures
+        end = time.time_ns() // 1000000
+        log_manager.info(f'加载图片库完成，共耗时 {str(end - start)} ms', 'load_db_pictures')
+
+    def save_app_config(self, app_config: AppConfig):
+        with open(log_manager.get_app_config_path(), 'w') as file:
+            file.write(json.dumps(app_config.__dict__, indent=4, ensure_ascii=False))
+
+    def save_config(self, config_update: Config):
+        # TODO-low：UI 界面 新建、修改 config  。2024/08/29 11:54:55
+        app_config = self.app_config
+        configs = app_config.configs
+        for config in configs:
+            if config.name == config_update.name:
+                config.__dict__ = copy.deepcopy(config_update.__dict__)
+                break
+        self.save_app_config(app_config)
 
     def run_all_configs(self):
         start = time.time_ns() // 1000000
-        for config in self.read_app_config().configs:
+        for config in self.app_config.configs:
             if config.enable:
                 try:
                     t1 = time.time_ns() // 1000000
@@ -372,105 +439,6 @@ class PictureMatchManager:
                     log_manager.error(str(e), config.name)
         end = time.time_ns() // 1000000
         log_manager.info(f"总耗时：{str(end - start)} ms", 'configs')
-
-    def do_cal_picture_match_rate(self, picture_block_path, img_file_path, contraction_ratio=1.0):
-        """
-        计算两个图片的最大匹配度，前者是否是后者的一部分
-        """
-        block = pil2Cv(Image.open(picture_block_path))
-        img = pil2Cv(Image.open(img_file_path))
-        # 依据收缩比放缩原图片
-        if contraction_ratio is None:
-            return -1
-        reshaped_height = int(img.shape[:2][0] * contraction_ratio)
-        reshaped_width = int(img.shape[:2][1] * contraction_ratio)
-
-        if reshaped_height < block.shape[:2][0] or reshaped_width < block.shape[:2][1]:
-            return 0
-        new_img = cv2.resize(img, [reshaped_width, reshaped_height])
-        res = cv2.matchTemplate(new_img, block, cv2.TM_CCOEFF_NORMED)
-        return np.amax(res)
-
-    def find_picture_in_db(self, block_picture_path, config: Config):
-        # 先从缓存中获取
-        log_manager.info('查找缓存...', config.name)
-        result_from_cache = config.get_result_from_cache(block_picture_path)
-        if result_from_cache is not None:
-            return result_from_cache
-        # 缓存中没有，从数据库中遍历
-        log_manager.info('缓存中未找到，开始遍历数据库', config.name)
-        database_folder_path = config.get_database_folder()
-        all_file_path = common_utils.get_all_file_in_dir(database_folder_path, log_manager.get_app_folder())
-        if config.is_lock_contraction_ratio:
-            log_manager.info('固定收缩比模式，当前收缩比：' + str(config.fixed_contraction_ratio), config.name)
-            ratio_2_match_rate_2_path = self.find_fittest_picture(block_picture_path, all_file_path,
-                                                                  config.fixed_contraction_ratio)
-        else:
-            log_manager.info('自动查找模式，要扫描的收缩比范围：' + str(config.auto_contraction_ratio_range)
-                             + ', 步长：' + str(config.auto_contraction_ratio_step), config.name)
-            ratio_2_match_rate_2_path = self.find_highest_match_rate_picture(block_picture_path, all_file_path,
-                                                                             config.auto_contraction_ratio_range,
-                                                                             config.auto_contraction_ratio_step)
-        return ratio_2_match_rate_2_path
-
-    def find_highest_match_rate_picture(self, block_picture_path, all_file_path, contraction_ratio_range,
-                                        contraction_ratio_step):
-        """
-        遍历收缩比，逐一寻找匹配度最高的图片
-        """
-        start_ratio_int = int(100 * contraction_ratio_range[0])
-        end_ratio_int = int(100 * contraction_ratio_range[1])
-        step = int(100 * contraction_ratio_step)
-
-        ratio_2_match_rate_2_path = None
-        for i in range(start_ratio_int, end_ratio_int + 1, step):
-            contraction_ratio = float(i) / 100
-            fittest = self.find_fittest_picture(block_picture_path, all_file_path, contraction_ratio)
-            if fittest is None:
-                continue
-            if ratio_2_match_rate_2_path is None:
-                ratio_2_match_rate_2_path = fittest
-            elif fittest[1] > ratio_2_match_rate_2_path[1]:
-                ratio_2_match_rate_2_path = fittest
-        return ratio_2_match_rate_2_path
-
-    def find_fittest_picture(self, block_picture_path, all_file_path, contraction_ratio):
-        res_file_path = None
-        res_rate = 0
-        for file_path in all_file_path:
-            if not file_path.endswith('.png'):
-                continue
-            rate = self.do_cal_picture_match_rate(block_picture_path, file_path, contraction_ratio)
-            if rate > res_rate:
-                res_rate = rate
-                res_file_path = file_path
-        if res_file_path is None:
-            return None
-        return (contraction_ratio, res_rate, res_file_path)
-
-    def read_app_config(self):
-        app_config_path = log_manager.get_app_config_path()
-        if not os.path.exists(app_config_path):
-            with open(app_config_path, 'w') as file:
-                file.write(json.dumps(AppConfig([]).__dict__, indent=4, ensure_ascii=False))
-        with open(app_config_path, 'r') as file:
-            app_config_dict: dict = json.loads(file.read())
-            app_config = AppConfig(app_config_dict.get("configs"))
-        return app_config
-
-    def save_app_config(self, app_config: AppConfig):
-        with open(log_manager.get_app_config_path(), 'w') as file:
-            file.write(json.dumps(app_config.__dict__, indent=4, ensure_ascii=False))
-
-    def save_config(self, config_update: Config):
-        # TODO-low：UI 界面 新建、修改 config  。2024/08/29 11:54:55
-        app_config = self.read_app_config()
-        configs = app_config.configs
-        for config in configs:
-            if config.name == config_update.name:
-                config.__dict__ = copy.deepcopy(config_update.__dict__)
-                break
-        self.save_app_config(app_config)
 
     def do_run_config(self, config):
         windows = []
@@ -490,7 +458,7 @@ class PictureMatchManager:
         window = res_windows[0]
         if window.isMinimized:
             return False, '窗口已最小化，终止识别'
-        if not window.isActive:
+        if not window.isActive and not self.app_config.scan_when_window_inactive:
             return False, '窗口未激活，终止识别'
         # 截取图片
         png_path = config.get_temp_folder() + symbol + config.name + '.png'
@@ -499,7 +467,8 @@ class PictureMatchManager:
         image.save(png_path)
 
         # 从数据库中识别
-        ratio_2_match_rate_2_path = self.find_picture_in_db(png_path, config)
+        block = pil2Cv(Image.open(png_path))
+        ratio_2_match_rate_2_path = self.find_picture_in_db(block, config)
         if ratio_2_match_rate_2_path is None:
             return False, '未找到结果'
         elif ratio_2_match_rate_2_path[1] < config.threadhold_match_rate:
@@ -510,8 +479,85 @@ class PictureMatchManager:
             shutil.copyfile(ratio_2_match_rate_2_path[2], config.get_result_target_path())
             message = f'结果已找到，收缩比：{str(ratio_2_match_rate_2_path[0])}, 匹配度：{str(ratio_2_match_rate_2_path[1])}' \
                       f'，已保存到：{config.get_result_target_path()}（找到的目标路径为：{ratio_2_match_rate_2_path[2]}）'
-            config.add_cache(ratio_2_match_rate_2_path, png_path)
+            if self.app_config.enable_cache:
+                config.add_cache(ratio_2_match_rate_2_path, png_path)
             return True, message
+
+    def find_picture_in_db(self, block, config: Config):
+        # 先从缓存中获取
+        config_name = config.name
+        if self.app_config.enable_cache:
+            log_manager.info('查找缓存...', config_name)
+            result_from_cache = config.get_result_from_cache(block)
+            if result_from_cache is not None:
+                return result_from_cache
+            log_manager.info('缓存中未找到，开始遍历数据库', config_name)
+        else:
+            log_manager.info('缓存未开启，开始遍历数据库', config_name)
+        # 缓存中没有，从数据库中遍历
+        if config.is_lock_contraction_ratio:
+            log_manager.info('固定收缩比模式，当前收缩比：' + str(config.fixed_contraction_ratio), config_name)
+            ratio_2_match_rate_2_path = self.find_fittest_picture(block,
+                                                                  config.fixed_contraction_ratio,
+                                                                  config_name)
+        else:
+            log_manager.info('自动查找模式，要扫描的收缩比范围：' + str(config.auto_contraction_ratio_range)
+                             + ', 步长：' + str(config.auto_contraction_ratio_step), config_name)
+            ratio_2_match_rate_2_path = self.find_highest_match_rate_picture(block,
+                                                                             config.auto_contraction_ratio_range,
+                                                                             config.auto_contraction_ratio_step,
+                                                                             config_name)
+        return ratio_2_match_rate_2_path
+
+    def do_cal_picture_match_rate(self, block, db_picture: DbPicture, contraction_ratio=1.0):
+        """
+        计算两个图片的最大匹配度，前者是否是后者的一部分
+        """
+        # 依据收缩比放缩原图片
+        if contraction_ratio is None:
+            return -1
+        img = db_picture.image
+        reshaped_height = int(img.shape[:2][0] * contraction_ratio)
+        reshaped_width = int(img.shape[:2][1] * contraction_ratio)
+        if reshaped_height < block.shape[:2][0] or reshaped_width < block.shape[:2][1]:
+            return 0
+        new_img = cv2.resize(img, [reshaped_width, reshaped_height])
+        res = cv2.matchTemplate(new_img, block, cv2.TM_CCOEFF_NORMED)
+        return np.amax(res)
+
+    def find_highest_match_rate_picture(self, block, contraction_ratio_range,
+                                        contraction_ratio_step, config_name):
+        """
+        遍历收缩比，逐一寻找匹配度最高的图片
+        """
+        start_ratio_int = int(100 * contraction_ratio_range[0])
+        end_ratio_int = int(100 * contraction_ratio_range[1])
+        step = int(100 * contraction_ratio_step)
+
+        ratio_2_match_rate_2_path = None
+        for i in range(start_ratio_int, end_ratio_int + 1, step):
+            contraction_ratio = float(i) / 100
+            fittest = self.find_fittest_picture(block, contraction_ratio, config_name)
+            if fittest is None:
+                continue
+            if ratio_2_match_rate_2_path is None:
+                ratio_2_match_rate_2_path = fittest
+            elif fittest[1] > ratio_2_match_rate_2_path[1]:
+                ratio_2_match_rate_2_path = fittest
+        return ratio_2_match_rate_2_path
+
+    def find_fittest_picture(self, block, contraction_ratio, config_name):
+        res_file_path = None
+        res_rate = 0
+        pictures: list[DbPicture] = self.db_pictures[config_name]
+        for db_picture in pictures:
+            rate = self.do_cal_picture_match_rate(block, db_picture, contraction_ratio)
+            if rate > res_rate:
+                res_rate = rate
+                res_file_path = db_picture.path
+        if res_file_path is None:
+            return None
+        return (contraction_ratio, res_rate, res_file_path)
 
 
 class PictureMatchTool(toga.App):
@@ -595,7 +641,7 @@ class PictureMatchTool(toga.App):
         return box
 
     def start_all_configs_btn_handler(self, widget, **kwargs):
-        scan_interval_second = 5
+        scan_interval_second = self.picture_match_manager.app_config.scan_interval_seconds
         self.scheduler.add_job(self.picture_match_manager.run_all_configs, 'interval', seconds=scan_interval_second,
                                id='job_all',
                                replace_existing=True)
@@ -660,7 +706,7 @@ class PictureMatchTool(toga.App):
             i = i + 1
 
     def refresh_table_box(self):
-        configs = self.picture_match_manager.read_app_config().configs
+        configs = self.picture_match_manager.app_config.configs
         self.table_box.clear()
         for i in range(len(configs)):
             config = configs[i]

@@ -1,4 +1,7 @@
 {
+  "scan_interval_seconds": 5,
+  "enable_cache": false,
+  "scan_when_window_inactive": false,
   "configs": [
     {
       "name": "小饰品",
@@ -6,6 +9,7 @@
       "enable": true,
       "window_name": "炉石传说,HearthStone",
       "region": [0.414, 0.798, 0.439, 0.833],
+      "db_picture_valid_region": [0.16, 0.04, 0.86, 0.51],
       "is_lock_contraction_ratio": false,
       "fixed_contraction_ratio": 1,
       "auto_contraction_ratio_range": [0.1, 0.4],
@@ -19,6 +23,7 @@
       "enable": true,
       "window_name": "炉石传说,HearthStone",
       "region": [0.375, 0.734, 0.4, 0.764],
+      "db_picture_valid_region": [0.16, 0.04, 0.86, 0.51],
       "is_lock_contraction_ratio": false,
       "fixed_contraction_ratio": 1,
       "auto_contraction_ratio_range": [0.1, 0.4],
