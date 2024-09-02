@@ -27,7 +27,7 @@ import numpy as np
 import shutil
 import pyperclip
 from apscheduler.schedulers.background import BackgroundScheduler
-from datetime import datetime
+from datetime import datetime, timedelta
 import threading
 from functools import partial
 
@@ -45,7 +45,7 @@ def cv2Pil(img):
 
 
 def pil2Cv(img):
-    # 直接用cv2.imread读取的“中文名称”的图片，在cv2.match_template方法中，会报错，所以用pil读取后转化
+    # 直接用 cv2.imread 读取的“中文名称”的图片，在 cv2.matchTemplate 方法中，会报错，所以用pil读取后转化
     return cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
 
 
@@ -162,7 +162,14 @@ class LogManager:
         return file_path
 
 
+class LockInfo:
+    def __init__(self):
+        # 默认为 True，等加载完数据之后，再变为 False
+        self.is_loading_data = True
+
+
 log_manager = LogManager(Path())
+lock_info = LockInfo()
 
 
 class CustomEncoder(json.JSONEncoder):
@@ -185,13 +192,25 @@ class CacheEntity:
 
 
 class AppConfig:
-    def __init__(self, config_dict_list: list[dict], scan_interval_seconds=5, enable_cache=True, cache_similar_region=None, scan_when_window_inactive=False):
+    def __init__(self, config_dict_list: list[dict], scan_interval_seconds=5, enable_cache=True,
+                 cache_similar_region=None, scan_when_window_inactive=False, cache_similar_region_match_rate=0.9):
         if cache_similar_region is None:
             cache_similar_region = [0.05, 0.05, 0.95, 0.95]
         self.scan_interval_seconds: int = scan_interval_seconds
-        self.enable_cache: bool = enable_cache
-        self.cache_similar_region: list[float] = cache_similar_region
+        # 自动扫描运行周期，单位 秒
+
         self.scan_when_window_inactive: bool = scan_when_window_inactive
+        # 窗口“未激活”时，是否执行扫描操作（未激活是指，在windows中该窗口未在最上方，也就是不是鼠标最新点击的窗口）
+
+        self.enable_cache: bool = enable_cache
+        # 是否开启缓存
+
+        self.cache_similar_region: list[float] = cache_similar_region
+        # 使用缓存时，用最新截图的多大区域去和缓存库做对比
+        # （如果用全图完全相同才能使用缓存，则会导致如果截图时游戏画面稍微抖动，就会有几个像素的偏差，这样就无法使用缓存了）
+
+        self.cache_similar_region_match_rate: float = cache_similar_region_match_rate
+        # 截图与缓存库的匹配度阈值，高于此阈值时，才认为命中缓存
 
         self.configs: list[Config] = []
         if config_dict_list is not None:
@@ -312,29 +331,6 @@ class Config:
         if os.path.exists(cache_folder):
             shutil.rmtree(cache_folder)
 
-    def get_result_from_cache(self, block, cache_pictures: list[CacheEntity]):
-        # 若 block 的90%区域 在 cache 中匹配度高于 一定阈值，则认为其在缓存内
-        for cache_picture in cache_pictures:
-            if cache_picture.threadhold_match_rate != self.threadhold_match_rate \
-                    or not self.is_picture_in_cache(cache_picture.image, block):
-                # 和缓存图片 匹配阈值 的配置不同，或 不相似
-                continue
-            # 和缓存图片相似
-            result_picture_path = common_utils.get_absolute_path_from_relative(cache_picture.relative_result_picture_path, log_manager.get_app_folder())
-            if os.path.exists(result_picture_path):
-                return cache_picture.contraction_ratio, cache_picture.match_rate, result_picture_path
-            # 有缓存图片，但文件里没有目标文件，删除此缓存
-            os.remove(os.path.join(self.get_cache_folder(), cache_picture.cache_block_file_name))
-        return None
-
-    def is_picture_in_cache(self, pic1_path, block):
-        pic1 = pil2Cv(Image.open(pic1_path))
-        if pic1.shape == block.shape:
-            diff = cv2.subtract(pic1, block)
-            if is_pixel_zero(diff):
-                return True
-        return False
-
     def __get_cache_list_file_path(self):
         path = os.path.join(self.get_cache_folder(), 'list.json')
         return path
@@ -370,11 +366,9 @@ class DbPicture:
 
 class PictureMatchManager:
     def __init__(self):
-        self.app_config = self.__read_app_config()
+        self.app_config: AppConfig = self.__read_app_config()
         self.db_pictures: dict = {}
         self.cache_pictures: dict = {}
-        self.load_db_pictures()
-        self.load_cache_pictures()
 
     def __read_app_config(self):
         app_config_path = log_manager.get_app_config_path()
@@ -387,54 +381,69 @@ class PictureMatchManager:
                                    app_config_dict.get('scan_interval_seconds'),
                                    app_config_dict.get('enable_cache'),
                                    app_config_dict.get('cache_similar_region'),
-                                   app_config_dict.get('scan_when_window_inactive'))
+                                   app_config_dict.get('scan_when_window_inactive'),
+                                   app_config_dict.get('cache_similar_region_match_rate'))
         return app_config
 
     def load_db_pictures(self):
-        log_manager.info(f'开始加载图片库', 'load_db_pictures')
-        start = time.time_ns() // 1000000
-        for config in self.app_config.configs:
-            self.db_pictures[config.name].clear()
-            pictures: list[DbPicture] = []
-            database_folder_path = config.get_database_folder()
-            all_file_path = common_utils.get_all_file_in_dir(database_folder_path, log_manager.get_app_folder())
-            log_manager.info(f'扫描到 {len(all_file_path)} 个文件', config.name)
-            for file_path in all_file_path:
-                if not file_path.endswith('.png'):
-                    continue
-                img = pil2Cv(Image.open(file_path))
-                # 获取有效匹配区域
-                valid_region = common_utils.get_image_sub_region(img.shape[:2][0], img.shape[:2][1], config.db_picture_valid_region)
-                valid_picture = img[valid_region[0]:valid_region[2], valid_region[1]:valid_region[3]]
-                # 存入内存
-                picture = DbPicture()
-                picture.path = file_path
-                picture.image = valid_picture
-                pictures.append(picture)
-            self.db_pictures[config.name] = pictures
-            log_manager.info(f'已加载 {len(pictures)} 个图片', config.name)
-        end = time.time_ns() // 1000000
-        log_manager.info(f'加载图片库完成，共耗时 {str(end - start)} ms', 'load_db_pictures')
+        if lock_info.is_loading_data:
+            log_manager.info(f'已有加载数据的任务，请稍后再试', 'load_db_pictures')
+            return None
+        lock_info.is_loading_data = True
+        try:
+            log_manager.info(f'开始加载图片库', 'load_db_pictures')
+            self.db_pictures.clear()
+            start = time.time_ns() // 1000000
+            for config in self.app_config.configs:
+                pictures: list[DbPicture] = []
+                database_folder_path = config.get_database_folder()
+                all_file_path = common_utils.get_all_file_in_dir(database_folder_path, log_manager.get_app_folder())
+                log_manager.info(f'扫描到 {len(all_file_path)} 个文件', config.name)
+                for file_path in all_file_path:
+                    if not file_path.endswith('.png'):
+                        continue
+                    img = pil2Cv(Image.open(file_path))
+                    # 获取有效匹配区域
+                    valid_region = common_utils.get_image_sub_region(img.shape[:2][0], img.shape[:2][1], config.db_picture_valid_region)
+                    valid_picture = img[valid_region[0]:valid_region[2], valid_region[1]:valid_region[3]]
+                    # 存入内存
+                    picture = DbPicture()
+                    picture.path = file_path
+                    picture.image = valid_picture
+                    pictures.append(picture)
+                self.db_pictures[config.name] = pictures
+                log_manager.info(f'已加载 {len(pictures)} 个图片', config.name)
+            end = time.time_ns() // 1000000
+            log_manager.info(f'加载图片库完成，共耗时 {str(end - start)} ms', 'load_db_pictures')
+        finally:
+            lock_info.is_loading_data = False
 
     def load_cache_pictures(self):
-        if not self.app_config.enable_cache:
+        if lock_info.is_loading_data:
+            log_manager.info(f'已有加载数据的任务，请稍后再试', 'load_cache_pictures')
             return
-        log_manager.info(f'开始加载缓存', 'load_cache_pictures')
-        start = time.time_ns() // 1000000
-        for config in self.app_config.configs:
-            self.cache_pictures[config.name].clear()
-            cache_pictures: list[CacheEntity] = []
-            cache_folder_path = config.get_cache_folder()
-            cache_datas = config.read_cache_file()
-            for cache_data in cache_datas:
-                cache_file_path = os.path.join(cache_folder_path, cache_data.cache_block_file_name)
-                cache_image = pil2Cv(Image.open(cache_file_path))
-                cache_data.image = cache_image
-                cache_pictures.append(cache_data)
-            self.cache_pictures[config.name] = cache_pictures
-            log_manager.info(f'已加载 {len(cache_pictures)} 个图片', config.name)
-        end = time.time_ns() // 1000000
-        log_manager.info(f'加载缓存完成，共耗时 {str(end - start)} ms', 'load_cache_pictures')
+        lock_info.is_loading_data = True
+        try:
+            self.cache_pictures.clear()
+            if not self.app_config.enable_cache:
+                return
+            log_manager.info(f'开始加载缓存', 'load_cache_pictures')
+            start = time.time_ns() // 1000000
+            for config in self.app_config.configs:
+                cache_pictures: list[CacheEntity] = []
+                cache_folder_path = config.get_cache_folder()
+                cache_datas = config.read_cache_file()
+                for cache_data in cache_datas:
+                    cache_file_path = os.path.join(cache_folder_path, cache_data.cache_block_file_name)
+                    cache_image = pil2Cv(Image.open(cache_file_path))
+                    cache_data.image = cache_image
+                    cache_pictures.append(cache_data)
+                self.cache_pictures[config.name] = cache_pictures
+                log_manager.info(f'已加载 {len(cache_pictures)} 个图片', config.name)
+            end = time.time_ns() // 1000000
+            log_manager.info(f'加载缓存完成，共耗时 {str(end - start)} ms', 'load_cache_pictures')
+        finally:
+            lock_info.is_loading_data = False
 
     def save_app_config(self, app_config: AppConfig):
         with open(log_manager.get_app_config_path(), 'w') as file:
@@ -499,16 +508,21 @@ class PictureMatchManager:
         # 先从缓存中获取
         if self.app_config.enable_cache:
             log_manager.info('查找缓存...', config_name)
-            result_from_cache = config.get_result_from_cache(block, self.cache_pictures[config_name])
-            if result_from_cache is not None:
-                ratio_2_match_rate_2_path = result_from_cache
+            max_rate_res = self.get_max_similar_from_cache(block, self.cache_pictures[config_name], self.app_config.cache_similar_region, config)
+            if max_rate_res[0][0] >= self.app_config.cache_similar_region_match_rate:
+                # 大于指定阈值
+                log_manager.info(f'缓存中已找到，与缓存图的最高匹配度为：{str(max_rate_res[0][0])}', config_name)
+                ratio_2_match_rate_2_path = max_rate_res[1]
                 is_result_from_cache = True
             else:
-                log_manager.info('缓存中未找到，开始遍历数据库', config_name)
+                log_manager.info(f'缓存中未找到，与缓存库中的最高匹配度：{str(max_rate_res[0][0])}，缓存图名称：{str(max_rate_res[0][1])}，'
+                                 f'结果图收缩比：{str(max_rate_res[1][0])}，结果图匹配度：{str(max_rate_res[1][1])}，'
+                                 f'结果图路径：{str(max_rate_res[1][2])}', config_name)
         else:
-            log_manager.info('缓存未开启，开始遍历数据库', config_name)
+            log_manager.info('缓存未开启', config_name)
         if ratio_2_match_rate_2_path is None:
             # 缓存中没有，从数据库中遍历
+            log_manager.info('开始遍历数据库', config_name)
             ratio_2_match_rate_2_path = self.find_picture_in_db(block, config)
         if ratio_2_match_rate_2_path is None:
             return False, '未找到结果'
@@ -527,6 +541,28 @@ class PictureMatchManager:
                 self.cache_pictures[config_name].append(cache_data)
             return True, message
 
+    def get_max_similar_from_cache(self, block, cache_pictures: list[CacheEntity], cache_similar_region: list[float], config: Config):
+        # 计算 block 的90%左右区域 在 cache库 中的最高匹配度
+        block_sub_region = common_utils.get_image_sub_region(block.shape[:2][0], block.shape[:2][1], cache_similar_region)
+        sub_block = block[block_sub_region[1]:block_sub_region[3], block_sub_region[0]:block_sub_region[2]]
+        max_rate_res = [(0.6, ''), (0, 0, '')]
+        for cache_picture in cache_pictures:
+            if cache_picture.threadhold_match_rate != config.threadhold_match_rate:
+                # 和缓存图片 匹配阈值 的配置不同，或 不相似
+                continue
+            match_rate = self.do_cal_picture_match_rate(sub_block, cache_picture.image)
+            if match_rate < max_rate_res[0][0]:
+                continue
+            # 找到匹配度更高的了
+            result_picture_path = common_utils.get_absolute_path_from_relative(cache_picture.relative_result_picture_path, log_manager.get_app_folder())
+            if os.path.exists(result_picture_path):
+                max_rate_res = [(match_rate, cache_picture.cache_block_file_name),
+                                (cache_picture.contraction_ratio, cache_picture.match_rate, result_picture_path)]
+            else:
+                # 有缓存图片，但文件里没有目标文件，删除此缓存
+                os.remove(os.path.join(config.get_cache_folder(), cache_picture.cache_block_file_name))
+        return max_rate_res
+
     def find_picture_in_db(self, block, config: Config):
         config_name = config.name
         if config.is_lock_contraction_ratio:
@@ -543,14 +579,13 @@ class PictureMatchManager:
                                                                              config_name)
         return ratio_2_match_rate_2_path
 
-    def do_cal_picture_match_rate(self, block, db_picture: DbPicture, contraction_ratio=1.0):
+    def do_cal_picture_match_rate(self, block, img, contraction_ratio=1.0):
         """
         计算两个图片的最大匹配度，前者是否是后者的一部分
         """
         # 依据收缩比放缩原图片
         if contraction_ratio is None:
             return -1
-        img = db_picture.image
         reshaped_height = int(img.shape[:2][0] * contraction_ratio)
         reshaped_width = int(img.shape[:2][1] * contraction_ratio)
         if reshaped_height < block.shape[:2][0] or reshaped_width < block.shape[:2][1]:
@@ -585,7 +620,7 @@ class PictureMatchManager:
         res_rate = 0
         pictures: list[DbPicture] = self.db_pictures[config_name]
         for db_picture in pictures:
-            rate = self.do_cal_picture_match_rate(block, db_picture, contraction_ratio)
+            rate = self.do_cal_picture_match_rate(block, db_picture.image, contraction_ratio)
             if rate > res_rate:
                 res_rate = rate
                 res_file_path = db_picture.path
@@ -599,7 +634,7 @@ class PictureMatchTool(toga.App):
     def __init__(self, **options):
         super().__init__(**options)
         log_manager.app_path = self.app.paths.app
-        self.scheduler = BackgroundScheduler(timezone='MST')
+        self.scheduler = BackgroundScheduler()
         self.picture_match_manager = PictureMatchManager()
 
         # Find the name of the module that was used to start the app
@@ -630,8 +665,16 @@ class PictureMatchTool(toga.App):
         self.main_window = toga.MainWindow(title=self.formal_name + '-' + self.version, content=self.create_main_box())
         self.main_window.show()
 
-        # self.add_background_task(self.refresh_footer_log_handler)
-        self.on_running = self.refresh_footer_log_handler
+        self.add_background_task(self.refresh_footer_log_handler)
+        # self.on_running = self.refresh_footer_log_handler
+
+        self.scheduler.add_job(self.load_data, 'date', id='load_data')
+        self.scheduler.start()
+
+    def load_data(self):
+        lock_info.is_loading_data = False
+        self.picture_match_manager.load_db_pictures()
+        self.picture_match_manager.load_cache_pictures()
 
     def create_main_box(self):
         self.main_box = toga.Box(style=Pack(padding=20))
@@ -675,6 +718,9 @@ class PictureMatchTool(toga.App):
         return box
 
     def start_all_configs_btn_handler(self, widget, **kwargs):
+        if lock_info.is_loading_data:
+            log_manager.info(f'正在加载数据，请稍后再试', 'load')
+            return
         scan_interval_second = self.picture_match_manager.app_config.scan_interval_seconds
         self.scheduler.add_job(self.picture_match_manager.run_all_configs, 'interval', seconds=scan_interval_second,
                                id='job_all',
@@ -766,10 +812,10 @@ def main():
     return PictureMatchTool()
 
 # TODO-high  2024/08/29 08:01:21
-#  测试快捷方式管不管用
-#  【目标】全扫描性能优化到10秒左右，读缓存优化到3秒左右，应该就差不多了
-#  优化性能【待测试指定了图片库中图片有效区域，且预先读取了图片库后，性能有没有提升】
-#  优化缓存匹配逻辑，有些微差距也行，依据匹配程度，95%以上就算匹配
-#  显示结果图片
+#  【待测试性能有没有提升：指定了图片库中的有效区域，且预缓存了图片库，减少了block图片的重复读取】
+#         【性能目标】全扫描性能优化到10秒左右，读缓存优化到3秒左右，应该就差不多了
+#         【如果还不行，就打印一下 cv2.resize 和 cv2.matchTemplate 的耗时情况，看看是哪里消耗了时间】
+#  【测试缓存能否被正确应用、 测试快捷方式管不管用】
 
+#  TODO-high：显示结果图片
 # TODO-high： 等国服回来后，试试能不能申请调用官方的api获取图片数据  https://develop.battle.net/documentation/hearthstone/game-data-apis 。2024/08/30 09:37:01

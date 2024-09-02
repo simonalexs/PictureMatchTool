@@ -1,8 +1,9 @@
 {
   "scan_interval_seconds": 5,
+  "scan_when_window_inactive": false,
   "enable_cache": false,
   "cache_similar_region": [0.05, 0.05, 0.95, 0.95],
-  "scan_when_window_inactive": false,
+  "cache_similar_region_match_rate": 0.95,
   "configs": [
     {
       "name": "小饰品",
