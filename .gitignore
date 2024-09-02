@@ -8,8 +8,7 @@ logs
 data/**
 !data/database
 !data/database/**
-!data/cache
-!data/cache/**
+!result
 
 # C extensions
 *.so

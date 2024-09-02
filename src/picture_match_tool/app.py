@@ -180,7 +180,7 @@ class CustomEncoder(json.JSONEncoder):
 
 class CacheEntity:
     def __init__(self, cache_block_file_name, threadhold_match_rate, contraction_ratio, match_rate,
-                 relative_result_picture_path):
+                 relative_result_picture_path, image=None):
         self.cache_block_file_name: str = cache_block_file_name
         self.threadhold_match_rate: float = threadhold_match_rate
         self.contraction_ratio: float = contraction_ratio
@@ -462,6 +462,7 @@ class PictureMatchManager:
         while lock_info.is_loading_data:
             log_manager.info('等待后台数据加载完毕...', 'configs')
             time.sleep(1)
+        log_manager.info('================================================================', 'configs')
         start = time.time_ns() // 1000000
         for config in self.app_config.configs:
             if config.enable:
@@ -535,7 +536,7 @@ class PictureMatchManager:
             # 找到符合阈值的结果了
             shutil.copyfile(ratio_2_match_rate_2_path[2], config.get_result_target_path())
             message = f'结果已找到，收缩比：{str(ratio_2_match_rate_2_path[0])}, 匹配度：{str(ratio_2_match_rate_2_path[1])}' \
-                      f'，已保存到：{config.get_result_target_path()}（找到的目标路径为：{ratio_2_match_rate_2_path[2]}）'
+                      f'，找到的目标：{ratio_2_match_rate_2_path[2]}'
             if self.app_config.enable_cache and not is_result_from_cache:
                 # 添加到缓存
                 cache_data = config.add_cache(ratio_2_match_rate_2_path, png_path)
