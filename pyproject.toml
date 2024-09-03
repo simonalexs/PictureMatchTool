@@ -32,6 +32,7 @@ requires = [
     "numpy",
     "PyAutoGUI",
     "pywin32",
+    "requests",
 ]
 test_requires = [
     "pytest",
