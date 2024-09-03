@@ -15,7 +15,7 @@
       "db_picture_valid_region": [0.16, 0.04, 0.86, 0.51],
       "is_lock_contraction_ratio": false,
       "fixed_contraction_ratio": 1,
-      "auto_contraction_ratio_range": [0.1, 0.4],
+      "auto_contraction_ratio_range": [0.2, 0.8],
       "auto_contraction_ratio_step": 0.03,
       "threadhold_match_rate": 0.85,
       "result_target_folder": "data\\result"
@@ -29,7 +29,7 @@
       "db_picture_valid_region": [0.16, 0.04, 0.86, 0.51],
       "is_lock_contraction_ratio": false,
       "fixed_contraction_ratio": 1,
-      "auto_contraction_ratio_range": [0.1, 0.4],
+      "auto_contraction_ratio_range": [0.2, 0.8],
       "auto_contraction_ratio_step": 0.03,
       "threadhold_match_rate": 0.85,
       "result_target_folder": "data\\result"
