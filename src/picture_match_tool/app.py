@@ -5,8 +5,10 @@ import json
 import webbrowser
 import logging
 
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from numpy import float32
 from toga.style import Pack
+from toga.style import pack
 
 from .utils import common_utils
 import asyncio
@@ -78,19 +80,23 @@ class LogManager:
     def get_app_config_path(self):
         return os.path.join(self.get_app_folder(), 'config', 'config.json5')
 
-    def debug(self, msg, config_name):
-        self.__write_log('debug', msg, config_name)
+    def debug(self, msg, config_name, type='debug'):
+        self.__write_log('debug', type, msg, config_name)
 
-    def info(self, msg, config_name):
-        self.__write_log('info', msg, config_name)
-        self.debug(msg, config_name)
+    def info(self, msg, config_name, type='info'):
+        self.__write_log('info', type, msg, config_name)
+        self.debug(msg, config_name, type)
 
-    def error(self, msg, config_name):
-        self.__write_log('error', msg, config_name)
-        self.info(msg, config_name)
+    def warn(self, msg, config_name, type='warn'):
+        self.__write_log('warn', type, msg, config_name)
+        self.info(msg, config_name, type)
 
-    def get_log(self, type) -> list[str]:
-        file_path = self.__get_log_path(type)
+    def error(self, msg, config_name, type='error'):
+        self.__write_log('error', type, msg, config_name)
+        self.warn(msg, config_name, type)
+
+    def get_log(self, file_name) -> list[str]:
+        file_path = self.__get_log_path(file_name)
         result = []
         if not os.path.exists(file_path):
             return result
@@ -105,30 +111,36 @@ class LogManager:
                 line = file.readline()
         return result
 
-    def __write_log(self, type, content, config_name):
+    def __write_log(self, file_name, type, content, config_name):
         now = datetime.now()
         now_str = now.strftime('%Y-%m-%d %H:%M:%S')
         millisecondsInt = int((now - now.replace(microsecond=0)).total_seconds() * 1000)
         real_content = f"{now_str}.{millisecondsInt:03} [{type}] [{config_name}] {content}"
 
-        file_path = self.__get_log_path(type)
+        file_path = self.__get_log_path(file_name)
         with open(file_path, 'a') as file:
-            print(real_content)
             file.write(real_content + '\n')
         # 日志文件过大时，减小文件体积
         if os.path.exists(file_path):
             file_size_byte = os.path.getsize(file_path)
             if file_size_byte >= 10 * 1024 * 1024:
-                all_lines: list[str] = self.get_log(type)
+                all_lines: list[str] = self.get_log(file_name)
                 with open(file_path, 'w') as file:
                     file.write('\n'.join(all_lines[-2000:]))
 
-    def __get_log_path(self, type):
+    def __get_log_path(self, file_name):
         path = self.get_app_folder() + symbol + 'logs'
         if not os.path.exists(path):
             os.makedirs(path)
-        file_path = path + symbol + type + '.log'
+        file_path = path + symbol + file_name + '.log'
         return file_path
+
+    def clear_log(self):
+        types = ['info', 'warn', 'debug']
+        for t in types:
+            file_path = self.__get_log_path(t)
+            if os.path.exists(file_path):
+                os.remove(file_path)
 
 
 class LockInfo:
@@ -626,6 +638,9 @@ class PictureMatchTool(toga.App):
     def __init__(self, **options):
         super().__init__(**options)
         log_manager.app_path = self.app.paths.app
+        log_manager.clear_log()
+
+        self.releases_url = 'https://github.com/simonalexs/PictureMatchTool/releases'
         self.scheduler = BackgroundScheduler()
         self.picture_match_manager = PictureMatchManager()
 
@@ -638,11 +653,14 @@ class PictureMatchTool(toga.App):
         self.main_window = toga.MainWindow(title=self.formal_name + '-' + self.version, content=self.create_main_box())
         self.main_window.show()
 
-        self.add_background_task(self.refresh_footer_log_handler)
-        # self.on_running = self.refresh_footer_log_handler
+        self.on_running = self.refresh_footer_log_handler
 
-        self.scheduler.add_job(self.load_data, 'date', id='load_data')
+        self.scheduler.add_job(self.after_started, 'date', id='after_started')
         self.scheduler.start()
+
+    def after_started(self):
+        self.check_update()
+        self.load_data()
 
     def load_data(self, widget=None, **kwargs):
         if lock_info.is_loading_data:
@@ -650,6 +668,16 @@ class PictureMatchTool(toga.App):
             return
         self.picture_match_manager.load_db_pictures()
         self.picture_match_manager.load_cache_pictures()
+
+    def check_update(self, widget=None, **kwargs):
+        log_manager.info('开始检查新版本', 'check_update')
+        status, info = common_utils.check_update_in_github(self.releases_url, self.version)
+        if status == 1:
+            log_manager.info('检测到新版本：' + info + '，可点击右上角“下载新版本”按钮前往下载', 'check_update')
+        elif status == 0:
+            log_manager.info(info, 'check_update')
+        else:
+            log_manager.warn(info, 'check_update')
 
     def create_main_box(self):
         self.padding = 10
@@ -666,7 +694,7 @@ class PictureMatchTool(toga.App):
         body_scroll_container = toga.ScrollContainer(content=self.create_body_box(), horizontal=False, vertical=True,
                                                      style=Pack(padding=self.padding,
                                                                 width=self.width,
-                                                                height=150))
+                                                                height=100))
         self.main_box.add(body_scroll_container)
         # footer
         footer_scroll_height = 200
@@ -694,6 +722,10 @@ class PictureMatchTool(toga.App):
         # box.add(toga.Label('空白，用来占用空间', style=Pack(flex=1, visibility='hidden')))
 
         box.add(toga.Button('重新加载图片库', style=Pack(width=100), on_press=self.load_data))
+
+        box.add(toga.Button('检查更新', style=Pack(width=80), on_press=self.check_update))
+        self.download_new_version_btn = toga.Button('下载新版本', style=Pack(width=80), on_press=lambda widget: webbrowser.open(self.releases_url))
+        box.add(self.download_new_version_btn)
 
         box.add(toga.Label('空白，用来占用空间', style=Pack(width=50, visibility='hidden')))
 
@@ -750,12 +782,12 @@ class PictureMatchTool(toga.App):
         self.footer_box = toga.Box(style=Pack(direction=COLUMN, padding=self.padding))
         return self.footer_box
 
-    async def refresh_footer_log_handler(self, widget, **kwargs):
+    async def refresh_footer_log_handler(self, widget=None, **kwargs):
         while True:
-            await self.do_refresh_footer_log(self.picture_match_manager.app_config.show_log_num)
+            self.do_refresh_footer_log(self.picture_match_manager.app_config.show_log_num)
             await asyncio.sleep(1)
 
-    async def do_refresh_footer_log(self, log_nums=20):
+    def do_refresh_footer_log(self, log_nums=20):
         logs = log_manager.get_log('info')
         new_show_logs = logs[(-log_nums - 1):]
 
@@ -765,9 +797,21 @@ class PictureMatchTool(toga.App):
         i = 1
         for log in new_show_logs:
             if i > item_nums:
-                self.footer_box.add(Item(log))
+                label = toga.Label('')
+                self.footer_box.add(label)
             else:
-                items[i - 1].set(log)
+                label = items[i - 1]
+
+            if log.find('检测到新版本') != -1:
+                color = '#f44336'
+                label.style.color = '#ffffff'
+            elif log.find('[warn]') != -1:
+                color = '#ffeb3b'
+            else:
+                color = '#ffffff'
+            label.text = log
+            label.style.background_color = color
+
             i = i + 1
 
     def refresh_table_box(self):

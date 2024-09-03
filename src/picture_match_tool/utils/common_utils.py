@@ -1,5 +1,7 @@
 import os
 
+import requests
+
 
 def get_relative_path(absolute_path: str, app_folder):
     return absolute_path.replace(app_folder, '')[1:]
@@ -61,3 +63,37 @@ def get_image_sub_region(height, width, region):
     region_right = int(width * region[2])
     region_bottom = int(height * region[3])
     return region_left, region_top, region_right, region_bottom
+
+
+def compare_version(v1: str, v2: str) -> int:
+    s1 = v1.split('.')
+    s2 = v2.split('.')
+    v1_value = int(s1[0]) * 10000 + int(s1[1]) * 100 + int(s1[2])
+    v2_value = int(s2[0]) * 10000 + int(s2[1]) * 100 + int(s2[2])
+    return v1_value - v2_value
+
+
+def check_update_in_github(releases_url, this_version):
+    content_before_version = releases_url.replace('https://github.com', '') + '/tag/'
+    try:
+        response = requests.get(releases_url, verify=False, timeout=3)
+        # 检查请求是否成功
+        if response.status_code == 200:
+            # 获取网页的源代码
+            html_content = response.text
+            index = html_content.find(content_before_version)
+            if index == -1:
+                return -1, '检查失败，网页中未找到版本信息关键字'
+            else:
+                version_index = index + len(content_before_version)
+                version_info = html_content[version_index:(version_index + 15)]
+                latest_version = version_info[:version_info.find('"')]
+                if compare_version(latest_version, this_version) > 0:
+                    return 1, latest_version
+                else:
+                    return 0, '已是最新版本'
+        else:
+            return -1, '请求失败，请检查是否能访问 github，可尝试使用微软商店中的“watt toolkit”加速github'
+    except Exception as e:
+        return -1, '请求失败，请检查是否能访问 github，可尝试使用微软商店中的“watt toolkit”加速github'
+
