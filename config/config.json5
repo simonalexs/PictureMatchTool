@@ -4,6 +4,7 @@
   "enable_cache": false,
   "cache_similar_region": [0.05, 0.05, 0.95, 0.95],
   "cache_similar_region_match_rate": 0.95,
+  "show_log_num": 20,
   "configs": [
     {
       "name": "小饰品",

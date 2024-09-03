@@ -6,7 +6,7 @@ version = "0.0.1"
 url = "https://pc.apps.python.simonalexs.com/picture_match_tool"
 license.file = "LICENSE"
 author = "SimonAlexs"
-author_email = "simonalexs@pc.apps.python.simonalexs.com"
+author_email = "1350966307@qq.com"
 
 [tool.briefcase.app.picture_match_tool]
 formal_name = "PictureMatchTool"
@@ -18,7 +18,7 @@ icon = "icons/app"
 sources = [
     "src/picture_match_tool",
     "config",
-    "data/database",
+    "data",
 ]
 test_sources = [
     "tests",
