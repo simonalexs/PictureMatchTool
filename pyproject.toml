@@ -2,7 +2,7 @@
 [tool.briefcase]
 project_name = "PictureMatchTool"
 bundle = "com.simonalexs.python.apps.pc"
-version = "0.0.1"
+version = "1.0.0"
 url = "https://pc.apps.python.simonalexs.com/picture_match_tool"
 license.file = "LICENSE"
 author = "SimonAlexs"
