@@ -840,9 +840,5 @@ def main():
     """
     return PictureMatchTool()
 
-# TODO-high  2024/08/29 08:01:21
-#  【测试缓存能否被正确应用、 测试快捷方式管不管用】
-#  【启动时检查 github 上是否有新版本】
-
-#  TODO-high：显示结果图片
+# TODO-high：显示结果图片
 # TODO-high： 等国服回来后，试试能不能申请调用官方的api获取图片数据  https://develop.battle.net/documentation/hearthstone/game-data-apis 。2024/08/30 09:37:01
