@@ -350,11 +350,11 @@ class DbPicture:
 
 class PictureMatchManager:
     def __init__(self):
-        self.app_config: AppConfig = self.__read_app_config()
+        self.app_config: AppConfig = self.load_app_config()
         self.db_pictures: dict = {}
         self.cache_pictures: dict = {}
 
-    def __read_app_config(self):
+    def load_app_config(self):
         app_config_path = log_manager.get_app_config_path()
         if not os.path.exists(app_config_path):
             with open(app_config_path, 'w') as file:
