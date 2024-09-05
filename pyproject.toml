@@ -33,6 +33,7 @@ requires = [
     "PyAutoGUI",
     "pywin32",
     "requests",
+    "mss",
 ]
 test_requires = [
     "pytest",

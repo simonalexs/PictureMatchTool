@@ -2,6 +2,7 @@
 my first
 """
 import json
+import math
 import webbrowser
 import logging
 
@@ -40,6 +41,11 @@ except ImportError:
     import importlib_metadata
 
 symbol = '/'
+app_main_box = None
+
+
+def find_widget_by_id(widget_id):
+    return common_utils.find_widget_by_id(app_main_box, widget_id)
 
 
 def cv2Pil(img):
@@ -156,6 +162,8 @@ class CustomEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, float32):
             return float(str(obj))
+        if isinstance(obj, Config):
+            return obj.__dict__
         return json.JSONEncoder.default(self, obj)
 
 
@@ -168,15 +176,18 @@ class CacheEntity:
         self.match_rate: float = match_rate
         self.relative_result_picture_path: str = relative_result_picture_path
         # 内存中使用
-        self.image = None
+        self.image = image
 
 
 class AppConfig:
-    def __init__(self, config_dict_list: list[dict], scan_interval_seconds=5, enable_cache=True,
+    def __init__(self, config_dict_list: list[dict], enable_debug_screenshot=False, scan_interval_seconds=5, enable_cache=True,
                  cache_similar_region=None, scan_when_window_inactive=False, cache_similar_region_match_rate=0.9,
                  show_log_num=10):
         if cache_similar_region is None:
             cache_similar_region = [0.05, 0.05, 0.95, 0.95]
+        self.enable_debug_screenshot: bool = enable_debug_screenshot
+        # 开启用于debug的截图和日志输出（截游戏窗口和全屏，以及打印坐标日志），用于调试出真正的饰品技能区域
+
         self.scan_interval_seconds: int = scan_interval_seconds
         # 自动扫描运行周期，单位 秒
 
@@ -280,17 +291,11 @@ class Config:
         return os.path.join(folder, self.name + '.png')
 
     def get_real_region_by_config(self, config_region: tuple[int, int, int, int], window):
-        key_left = int(window.width * config_region[0])
-        key_top = int(window.height * config_region[1])
-        key_right = int(window.width * config_region[2])
-        key_bottom = int(window.height * config_region[3])
+        key_left = math.ceil(window.width * config_region[0])
+        key_top = math.ceil(window.height * config_region[1])
+        key_right = math.floor(window.width * config_region[2])
+        key_bottom = math.floor(window.height * config_region[3])
         return window.left + key_left, window.top + key_top, window.left + key_right, window.top + key_bottom
-
-    def get_mouse_target_by_config(self, config_region: tuple[int, int, int, int], window):
-        left, top, right, bottom = self.get_real_region_by_config(config_region, window)
-        mouse_left = int((left + right) / 2)
-        mouse_top = int((top + bottom) / 2)
-        return mouse_left, mouse_top
 
     def add_cache(self, ratio_2_match_rate_2_path: tuple[float, float, str], block_picture_path: str) -> CacheEntity:
         cache_folder = self.get_cache_folder()
@@ -362,6 +367,7 @@ class PictureMatchManager:
         with open(app_config_path, 'r') as file:
             app_config_dict: dict = json.loads(file.read())
             app_config = AppConfig(app_config_dict.get("configs"),
+                                   app_config_dict.get('enable_debug_screenshot'),
                                    app_config_dict.get('scan_interval_seconds'),
                                    app_config_dict.get('enable_cache'),
                                    app_config_dict.get('cache_similar_region'),
@@ -432,10 +438,9 @@ class PictureMatchManager:
 
     def save_app_config(self, app_config: AppConfig):
         with open(log_manager.get_app_config_path(), 'w') as file:
-            file.write(json.dumps(app_config.__dict__, indent=4, ensure_ascii=False))
+            file.write(json.dumps(app_config.__dict__, indent=4, ensure_ascii=False, cls=CustomEncoder))
 
     def save_config(self, config_update: Config):
-        # TODO-low：UI 界面 新建、修改 config  。2024/08/29 11:54:55
         app_config = self.app_config
         configs = app_config.configs
         for config in configs:
@@ -486,8 +491,21 @@ class PictureMatchManager:
         # 截取图片
         png_path = config.get_temp_folder() + symbol + config.name + '.png'
         real_region = config.get_real_region_by_config(config.region, window)
-        image = ImageGrab.grab(real_region)
+        image = common_utils.screenshot_region(real_region)
         image.save(png_path)
+
+        if self.app_config.enable_debug_screenshot:
+            # 当截取的目标区域不是想要的饰品区域时，依据这个游戏窗口截图，和全屏截图，以及打印的坐标参数，来分析是哪里的问题
+            # 从 0，0 截取到游戏窗口右下角
+            screen_path = config.get_temp_folder() + symbol + 'screen_0_0.png'
+            common_utils.screenshot_region((0, 0, window.right, window.bottom)).save(screen_path)
+            # 截取游戏窗口
+            game_window_path = config.get_temp_folder() + symbol + 'gameWindow.png'
+            common_utils.screenshot_region((window.left, window.top, window.right, window.bottom)).save(game_window_path)
+            # 打印坐标信息
+            log_manager.info(f'window.left={window.left}, window.top={window.top}, window.right={window.right}, window.bottom={window.bottom}'
+                             f', window.wdith={window.width}, window.height={window.height}', config.name)
+            log_manager.info(f'region.left={real_region[0]}, region.top={real_region[1]}, region.right={real_region[2]}, region.bottom={real_region[3]}', config.name)
 
         # 从数据库中识别
         block = pil2Cv(Image.open(png_path))
@@ -650,10 +668,13 @@ class PictureMatchTool(toga.App):
         self.metadata = importlib_metadata.metadata(app_module)
 
     def startup(self):
-        self.main_window = toga.MainWindow(title=self.formal_name + '-' + self.version, content=self.create_main_box())
+        self.main_window = toga.MainWindow(title=self.formal_name + '-' + self.version)
+        self.main_window.content = self.create_main_box()
+        global app_main_box
+        app_main_box = self.main_box
         self.main_window.show()
 
-        self.on_running = self.refresh_footer_log_handler
+        self.on_running = self.refresh_ui_handler
 
         self.scheduler.add_job(self.after_started, 'date', id='after_started')
         self.scheduler.start()
@@ -661,6 +682,9 @@ class PictureMatchTool(toga.App):
     def after_started(self):
         self.check_update()
         self.load_data()
+
+    def get_app_config(self) -> AppConfig:
+        return self.picture_match_manager.app_config
 
     def load_data(self, widget=None, **kwargs):
         if lock_info.is_loading_data:
@@ -681,25 +705,28 @@ class PictureMatchTool(toga.App):
 
     def create_main_box(self):
         self.padding = 10
-        self.width = 900
+        self.width = 1200
         self.main_box = toga.Box(style=Pack(direction=COLUMN))
         self.main_box.style.width = self.width
-        self.main_box.style.height = 500
+        self.main_box.style.height = 700
 
         # header
         header_button_box = self.create_header_button_box()
         self.main_box.add(header_button_box)
 
+        # header-2
+        header_button_box2 = self.create_header_button_box2()
+        self.main_box.add(header_button_box2)
+
         # body
         body_scroll_container = toga.ScrollContainer(content=self.create_body_box(), horizontal=False, vertical=True,
-                                                     style=Pack(padding=self.padding,
-                                                                width=self.width,
-                                                                height=100))
+                                                     style=Pack(width=self.width,
+                                                                height=200))
         self.main_box.add(body_scroll_container)
         # footer
         footer_scroll_height = 200
         footer_scroll_container = toga.ScrollContainer(horizontal=False, vertical=True,
-                                                       style=Pack(direction=COLUMN, padding=self.padding, flex=1))
+                                                       style=Pack(direction=COLUMN, flex=1))
         footer_scroll_container.content = self.create_footer_box(footer_scroll_height)
         self.main_box.add(footer_scroll_container)
 
@@ -755,12 +782,50 @@ class PictureMatchTool(toga.App):
         self.stop_all_configs_btn.enabled = False
         log_manager.info('已停止识别', 'configs')
 
+    def create_header_button_box2(self):
+        box = toga.Box(style=Pack(padding=self.padding, width=self.width))
+
+        app_config = self.get_app_config()
+        box.add(toga.Switch('允许窗口未激活时识别', id='scan_when_window_inactive', value=app_config.scan_when_window_inactive))
+
+        box.add(toga.Switch('启用缓存', id='enable_cache', value=app_config.enable_cache))
+
+        box.add(toga.Switch('开启调试模式', id='enable_debug_screenshot', value=app_config.enable_debug_screenshot))
+
+        box.add(toga.Label('空白，用来占用空间', style=Pack(flex=1, visibility='hidden')))
+
+        box.add(toga.Button('保存配置', on_press=self.save_config_btn_handler))
+
+        box.add(toga.Label('空白，用来占用空间', style=Pack(width=50, visibility='hidden')))
+        return box
+
+    def save_config_btn_handler(self, widget, **kwargs):
+        app_config = self.get_app_config()
+        app_config.scan_when_window_inactive = find_widget_by_id('scan_when_window_inactive').value
+        app_config.enable_debug_screenshot = find_widget_by_id('enable_debug_screenshot').value
+        app_config.enable_cache = find_widget_by_id('enable_cache').value
+
+        for config in app_config.configs:
+            config_name = config.name
+            # 修改 enable
+            config.enable = find_widget_by_id(f'{config_name}_enable').value
+            # 修改 region
+            region_str: str = find_widget_by_id(f'{config_name}_region').value
+            region_splits = region_str.split(',')
+            for i in range(0, 4):
+                config.region[i] = float(region_splits[i].strip())
+        # 保存配置
+        self.picture_match_manager.save_app_config(app_config)
+        log_manager.info('保存配置成功。可能会延时几秒才生效', 'save_config')
+        # 开启缓存的话重新加载缓存
+        self.picture_match_manager.load_cache_pictures()
+
     def create_body_box(self):
-        body = toga.Box()
+        body = toga.Box(style=Pack(padding=self.padding))
         body.style.direction = COLUMN
 
-        header_names = ["配置名称", "窗口名", "启用状态", "结果图存储路径"]
-        self.table_box_column_widths = [80, 200, 80, 500]
+        header_names = ["启用", "配置名称", "窗口名", "截图区域", "截图预览", "结果图存储路径"]
+        self.table_box_column_widths = [40, 80, 200, 200, 80, 500]
 
         header_box = toga.Box()
         for i in range(len(header_names)):
@@ -782,9 +847,10 @@ class PictureMatchTool(toga.App):
         self.footer_box = toga.Box(style=Pack(direction=COLUMN, padding=self.padding))
         return self.footer_box
 
-    async def refresh_footer_log_handler(self, widget=None, **kwargs):
+    async def refresh_ui_handler(self, widget=None, **kwargs):
         while True:
             self.do_refresh_footer_log(self.picture_match_manager.app_config.show_log_num)
+            self.do_show_screenshot_image()
             await asyncio.sleep(1)
 
     def do_refresh_footer_log(self, log_nums=20):
@@ -819,18 +885,42 @@ class PictureMatchTool(toga.App):
         self.table_box.clear()
         for i in range(len(configs)):
             config = configs[i]
+            config_name = config.name
+            region_str = ','.join([str(item) for item in config.region])
             row = toga.Box(
+                id=config_name,
                 style=Pack(padding_top=10),
                 children=[
-                    toga.Label(config.name, style=Pack(width=self.table_box_column_widths[0])),
-                    toga.Label(config.window_name, style=Pack(width=self.table_box_column_widths[1])),
-                    toga.Label('已启用' if config.enable else '已禁用',
-                               style=Pack(width=self.table_box_column_widths[2])),
+                    toga.Switch('', id=f'{config_name}_enable', value=config.enable, style=Pack(width=self.table_box_column_widths[0])),
+                    toga.Label(config_name, style=Pack(width=self.table_box_column_widths[1])),
+                    toga.Label(config.window_name, style=Pack(width=self.table_box_column_widths[2])),
+                    toga.TextInput(id=f'{config_name}_region', value=region_str,
+                                   style=Pack(width=self.table_box_column_widths[3])),
+                    toga.Box(children=[
+                            toga.ImageView(id=f'{config_name}_screenshot_view', style=Pack(width=60, height=40))
+                        ],
+                        style=Pack(width=self.table_box_column_widths[4])),
                     toga.TextInput(value=config.get_result_target_path(),
-                                   style=Pack(width=self.table_box_column_widths[3]), readonly=True)
+                                   style=Pack(width=self.table_box_column_widths[5]), readonly=True)
                 ]
             )
             self.table_box.add(row)
+
+    def handle_config_enable_switch(self, widget, **kwargs):
+        app_config = self.get_app_config()
+        for config in app_config.configs:
+            if config.name == widget.id:
+                config.enable = widget.value
+        self.picture_match_manager.save_app_config(app_config)
+
+    def do_show_screenshot_image(self):
+        # 显示在软件界面上
+        for config in self.get_app_config().configs:
+            image_view = find_widget_by_id(f'{config.name}_screenshot_view')
+            if image_view is not None:
+                png_path = config.get_temp_folder() + symbol + config.name + ".png"
+                if os.path.exists(png_path):
+                    image_view.image = Image.open(png_path)
 
 
 def main():

@@ -1,6 +1,19 @@
 import os
 
+import mss
 import requests
+from PIL import Image
+from toga import ScrollContainer
+
+
+def screenshot_region(region):
+    with mss.mss() as sct:
+        width = region[2] - region[0]
+        height = region[3] - region[1]
+        screenshot = sct.grab({"left": region[0], "top": region[1], "width": width, "height": height})
+        pim = Image.new("RGB", screenshot.size)
+        pim.frombytes(screenshot.rgb)
+        return pim
 
 
 def get_relative_path(absolute_path: str, app_folder):
@@ -97,3 +110,40 @@ def check_update_in_github(releases_url, this_version):
     except Exception as e:
         return -1, '请求失败，请检查是否能访问 github，可尝试使用微软商店中的“watt toolkit”加速github'
 
+
+def find_widget_by_id(container, widget_id):
+    """
+    在指定的容器中递归查找具有给定 ID 的 Widget。
+
+    :param container: 要搜索的容器（Box 或其他包含子元素的 Widget）
+    :param widget_id: 要查找的 Widget 的 ID
+    :return: 找到的 Widget，如果没有找到则返回 None
+    """
+    # if hasattr(container, 'text'):
+    #     print(container, container.text)
+    #     if 'en' == container.text:
+    #         print(container.value)
+    #         print(container.id, hasattr(container, 'id'), container.id == widget_id, container.id == 'scan_when_window_inactive')
+    #         print(f'[{widget_id}]')
+    #         print(f'[{container.id}]')
+    # else:
+    #     print(container)
+    # 检查当前容器是否是我们正在查找的 Widget
+    if hasattr(container, 'id') and container.id == widget_id:
+        return container
+
+    # 遍历所有子元素
+    if isinstance(container, ScrollContainer):
+        found_widget = find_widget_by_id(container.content, widget_id)
+        if found_widget:
+            return found_widget
+    else:
+        if hasattr(container, 'children'):
+            for child in container.children:
+                # 递归调用以查找子元素中的 Widget
+                found_widget = find_widget_by_id(child, widget_id)
+                if found_widget:
+                    return found_widget
+
+    # 如果没有找到，则返回 None
+    return None
