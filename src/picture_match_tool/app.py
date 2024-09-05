@@ -497,14 +497,14 @@ class PictureMatchManager:
         if self.app_config.enable_debug_screenshot:
             # 当截取的目标区域不是想要的饰品区域时，依据这个游戏窗口截图，和全屏截图，以及打印的坐标参数，来分析是哪里的问题
             # 从 0，0 截取到游戏窗口右下角
-            screen_path = config.get_temp_folder() + symbol + 'screen_0_0.png'
+            screen_path = config.get_temp_folder() + symbol + 'screenshot_0_0.png'
             common_utils.screenshot_region((0, 0, window.right, window.bottom)).save(screen_path)
             # 截取游戏窗口
-            game_window_path = config.get_temp_folder() + symbol + 'gameWindow.png'
+            game_window_path = config.get_temp_folder() + symbol + 'screenshot_window.png'
             common_utils.screenshot_region((window.left, window.top, window.right, window.bottom)).save(game_window_path)
             # 打印坐标信息
-            log_manager.info(f'window.left={window.left}, window.top={window.top}, window.right={window.right}, window.bottom={window.bottom}'
-                             f', window.wdith={window.width}, window.height={window.height}', config.name)
+            log_manager.info(f'window.left={window.left}, window.top={window.top}, window.right={window.right}, window.bottom={window.bottom}', config.name)
+            log_manager.info(f'window.width={window.width}, window.height={window.height}', config.name)
             log_manager.info(f'region.left={real_region[0]}, region.top={real_region[1]}, region.right={real_region[2]}, region.bottom={real_region[3]}', config.name)
 
         # 从数据库中识别
@@ -780,7 +780,7 @@ class PictureMatchTool(toga.App):
         self.scheduler.remove_job('job_all')
         self.start_all_configs_btn.enabled = True
         self.stop_all_configs_btn.enabled = False
-        log_manager.info('已停止识别', 'configs')
+        log_manager.info('已停止识别（如果仍看到有新的识别日志，请不用担心，那只是最后一次的识别任务，之后就不会再自动识别了）', 'configs')
 
     def create_header_button_box2(self):
         box = toga.Box(style=Pack(padding=self.padding, width=self.width))
@@ -799,7 +799,10 @@ class PictureMatchTool(toga.App):
         box.add(toga.Label('空白，用来占用空间', style=Pack(width=50, visibility='hidden')))
         return box
 
-    def save_config_btn_handler(self, widget, **kwargs):
+    async def save_config_btn_handler(self, widget, **kwargs):
+        confirm_dialog = toga.QuestionDialog('二次确认', '确认要保存当前配置信息？')
+        if not await self.dialog(confirm_dialog):
+            return
         app_config = self.get_app_config()
         app_config.scan_when_window_inactive = find_widget_by_id('scan_when_window_inactive').value
         app_config.enable_debug_screenshot = find_widget_by_id('enable_debug_screenshot').value
@@ -816,7 +819,7 @@ class PictureMatchTool(toga.App):
                 config.region[i] = float(region_splits[i].strip())
         # 保存配置
         self.picture_match_manager.save_app_config(app_config)
-        log_manager.info('保存配置成功。可能会延时几秒才生效', 'save_config')
+        log_manager.info('保存配置成功（配置已生效，不需要重启本软件。若已开启自动识别，则配置可能会延迟几秒生效，不用担心）', 'save_config')
         # 开启缓存的话重新加载缓存
         self.picture_match_manager.load_cache_pictures()
 
