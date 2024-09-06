@@ -2,6 +2,7 @@ import json
 import os
 import sys
 import mss
+import pyautogui
 import requests
 from PIL import ImageGrab
 import pygetwindow as gw
@@ -21,17 +22,9 @@ def sc(region):
 
 url = 'https://github.com/simonalexs/PictureMatchTool/releases'
 
-name = '钉钉'
-windows = gw.getWindowsWithTitle(name)
-if len(windows) == 0:
-    print ('未找到窗口[' + name + ']')
-res_windows = []
-for window in windows:
-    if name == window.title:
-        res_windows.append(window)
-window = res_windows[0]
-print(window.left, window.top, window.right, window.bottom)
-print(window.width, window.height)
+print(pyautogui.size())
+common_utils.get_screen_size(1)
+
 # ImageGrab.grab((0, 0, window.right, window.bottom)).show('0-0-right-bottom')
 # ImageGrab.grab((window.left, window.top, window.right, window.bottom)).show('0-0-right-bottom')
 

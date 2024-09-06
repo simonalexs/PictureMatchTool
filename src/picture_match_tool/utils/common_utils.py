@@ -2,7 +2,9 @@ import os
 
 import mss
 import requests
+import screeninfo
 from PIL import Image
+from pygetwindow import Win32Window
 from toga import ScrollContainer
 
 
@@ -14,6 +16,43 @@ def screenshot_region(region):
         pim = Image.new("RGB", screenshot.size)
         pim.frombytes(screenshot.rgb)
         return pim
+
+
+def get_window_screen_index_if_window_in_a_screen(window: Win32Window, pixel_error_range: int=0) -> int:
+    """
+    判断该窗口是否全都在一个显示器里，是的话返回 screen 的 index，否则返回 -1
+    param: pixel_error_range 判断时允许的像素误差范围
+    """
+    index = 0
+    screen_left = 0
+    for screen in screeninfo.get_monitors():
+        screen_right = screen.width + screen_left
+        screen_top = 0
+        screen_bottom = screen.height + screen_top
+        if window.left >= screen_left - pixel_error_range \
+                and window.top >= screen_top - pixel_error_range \
+                and window.right <= screen_right + pixel_error_range \
+                and window.bottom <= screen_bottom + pixel_error_range:
+            return index
+        # 为下一个屏幕判断做准备
+        screen_left = screen_right
+        index = index + 1
+    return -1
+
+
+def is_window_full_screen(window: Win32Window, screen_index: int, pixel_error_range: int=0):
+    """
+    判断该窗口是否是全屏状态
+    param: pixel_error_range 判断时允许的像素误差范围
+    """
+    index = 0
+    for screen in screeninfo.get_monitors():
+        if index == screen_index:
+            if abs(window.width - screen.width) <= pixel_error_range \
+                    and abs(window.height - screen.height) <= pixel_error_range:
+                return True
+        index = index + 1
+    return False
 
 
 def get_relative_path(absolute_path: str, app_folder):

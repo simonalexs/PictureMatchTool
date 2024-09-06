@@ -1,5 +1,5 @@
 {
-    "enable_debug_screenshot": true,
+    "enable_debug_mode": true,
     "scan_interval_seconds": 5,
     "scan_when_window_inactive": true,
     "enable_cache": false,
@@ -11,12 +11,19 @@
     ],
     "cache_similar_region_match_rate": 0.95,
     "show_log_num": 12,
+    "pixel_error_range_when_judge_full_screen": 0,
     "configs": [
         {
             "name": "小饰品",
             "description": "",
             "enable": true,
             "window_name": "炉石传说,HearthStone",
+            "region_in_full_screen": [
+                0.414,
+                0.798,
+                0.439,
+                0.833
+            ],
             "region": [
                 0.414,
                 0.798,
@@ -36,7 +43,7 @@
                 0.8
             ],
             "auto_contraction_ratio_step": 0.03,
-            "threadhold_match_rate": 0.85,
+            "threadhold_match_rate": 0.8,
             "result_target_folder": "data\\result"
         },
         {
@@ -44,6 +51,12 @@
             "description": "",
             "enable": true,
             "window_name": "炉石传说,HearthStone",
+            "region_in_full_screen": [
+                0.414,
+                0.798,
+                0.439,
+                0.833
+            ],
             "region": [
                 0.375,
                 0.734,
@@ -63,7 +76,7 @@
                 0.8
             ],
             "auto_contraction_ratio_step": 0.03,
-            "threadhold_match_rate": 0.85,
+            "threadhold_match_rate": 0.8,
             "result_target_folder": "data\\result"
         }
     ]
