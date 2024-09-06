@@ -11,7 +11,7 @@
     ],
     "cache_similar_region_match_rate": 0.95,
     "show_log_num": 12,
-    "pixel_error_range_when_judge_full_screen": 0,
+    "full_screen_model": true,
     "configs": [
         {
             "name": "小饰品",
@@ -19,10 +19,10 @@
             "enable": true,
             "window_name": "炉石传说,HearthStone",
             "region_in_full_screen": [
-                0.414,
-                0.798,
-                0.439,
-                0.833
+                0.40885,
+                0.7925,
+                0.4369,
+                0.8308
             ],
             "region": [
                 0.414,
@@ -52,10 +52,10 @@
             "enable": true,
             "window_name": "炉石传说,HearthStone",
             "region_in_full_screen": [
-                0.414,
-                0.798,
-                0.439,
-                0.833
+                0.3645,
+                0.725,
+                0.3927,
+                0.7633
             ],
             "region": [
                 0.375,

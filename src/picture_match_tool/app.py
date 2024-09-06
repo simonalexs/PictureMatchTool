@@ -185,7 +185,7 @@ class CacheEntity:
 class AppConfig:
     def __init__(self, config_dict_list: list[dict], enable_debug_mode=False, scan_interval_seconds=5, enable_cache=True,
                  cache_similar_region=None, scan_when_window_inactive=False, cache_similar_region_match_rate=0.9,
-                 show_log_num=10, pixel_error_range_when_judge_full_screen=0):
+                 show_log_num=10, full_screen_model=False):
         if cache_similar_region is None:
             cache_similar_region = [0.05, 0.05, 0.95, 0.95]
         self.enable_debug_mode: bool = enable_debug_mode
@@ -210,8 +210,8 @@ class AppConfig:
         self.show_log_num = show_log_num
         # 日志显示条数
 
-        self.pixel_error_range_when_judge_full_screen: int = pixel_error_range_when_judge_full_screen
-        """判断窗口是否是“全屏”时，允许的像素误差范围"""
+        self.full_screen_model: bool = full_screen_model
+        # 全屏模式
 
         self.configs: list[Config] = []
         if config_dict_list is not None:
@@ -383,7 +383,7 @@ class PictureMatchManager:
                                    app_config_dict.get('scan_when_window_inactive'),
                                    app_config_dict.get('cache_similar_region_match_rate'),
                                    app_config_dict.get('show_log_num'),
-                                   app_config_dict.get('pixel_error_range_when_judge_full_screen'))
+                                   app_config_dict.get('full_screen_model'))
         return app_config
 
     def load_db_pictures(self):
@@ -501,21 +501,19 @@ class PictureMatchManager:
             return False, '窗口未激活，终止识别'
         # 截取图片
         png_path = config.get_temp_folder() + symbol + config.name + '.png'
-        # 判断当前窗口是否都在一个屏幕里
-        screen_index = common_utils.get_window_screen_index_if_window_in_a_screen(window, app_config.pixel_error_range_when_judge_full_screen)
-        if screen_index == -1:
-            return False, '窗口没有完全处于同一个显示器内，终止识别'
+
         # 依据当前窗口是否是全屏状态，取用不同的配置信息
-        if common_utils.is_window_full_screen(window, screen_index, app_config.pixel_error_range_when_judge_full_screen):
-            log_manager.debug('检测到当前窗口为：全屏模式', config.name)
+        if app_config.full_screen_model:
+            log_manager.debug('当前为：全屏模式', config.name)
             if len(config.region_in_full_screen) == 0:
                 return False, '当前配置未适配全屏模式，终止识别'
             config_region = config.region_in_full_screen
         else:
-            log_manager.debug('检测到当前窗口为：窗口模式', config.name)
+            log_manager.debug('当前为：窗口模式', config.name)
             if len(config.region) == 0:
                 return False, '当前配置未适配窗口模式，终止识别'
             config_region = config.region
+
         real_region = config.get_real_region_by_config(config_region, window)
         image = common_utils.screenshot_region(real_region)
         image.save(png_path)
@@ -845,11 +843,9 @@ class PictureMatchTool(toga.App):
 
         box.add(toga.Switch('启用缓存', id='enable_cache', value=app_config.enable_cache))
 
-        box.add(toga.Switch('调试模式', id='enable_debug_screenshot', value=app_config.enable_debug_mode))
+        box.add(toga.Switch('游戏全屏模式', id='full_screen_model', value=app_config.full_screen_model))
 
-        box.add(toga.Label('判断是否全屏时允许的误差(像素)：'))
-        box.add(toga.TextInput(id='pixel_error_range_when_judge_full_screen', value=str(app_config.pixel_error_range_when_judge_full_screen),
-                       style=Pack(width=50))),
+        box.add(toga.Switch('调试模式', id='enable_debug_screenshot', value=app_config.enable_debug_mode))
 
         box.add(toga.Label('空白，用来占用空间', style=Pack(flex=1, visibility='hidden')))
 
@@ -866,7 +862,7 @@ class PictureMatchTool(toga.App):
         app_config.scan_when_window_inactive = find_widget_by_id('scan_when_window_inactive').value
         app_config.enable_debug_mode = find_widget_by_id('enable_debug_screenshot').value
         app_config.enable_cache = find_widget_by_id('enable_cache').value
-        app_config.pixel_error_range_when_judge_full_screen = int(find_widget_by_id('pixel_error_range_when_judge_full_screen').value)
+        app_config.full_screen_model = find_widget_by_id('full_screen_model').value
 
         for config in app_config.configs:
             config_name = config.name
@@ -1019,7 +1015,6 @@ def main():
     """
     return PictureMatchTool()
 
-# TODO-high：计算全屏模式数据，测试全屏模式是否通用
 
 
 # TODO-high：智能适配（全屏、窗口，以及能否 截个小图自动依据窗口截图去找目标区域）：
