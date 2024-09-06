@@ -833,7 +833,8 @@ class PictureMatchTool(toga.App):
         box.add(toga.Label('匹配结果路径：', style=Pack()))
         box.add(toga.Label(result_folder_path, style=Pack()))
         box.add(toga.Label('空白，用来占用空间', style=Pack(width=10, visibility='hidden')))
-        box.add(toga.Button('复制', on_press=partial(copy_to_clipboard_for_button, content=result_folder_path, is_show=True)))
+        box.add(toga.Button('打开此文件夹', on_press=lambda widget: os.startfile(result_folder_path)))
+        box.add(toga.Button('复制路径', style=Pack(padding_left=10), on_press=partial(copy_to_clipboard_for_button, content=result_folder_path, is_show=True)))
         return box
 
     def create_header_button_box3(self):

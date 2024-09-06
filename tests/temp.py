@@ -22,8 +22,7 @@ def sc(region):
 
 url = 'https://github.com/simonalexs/PictureMatchTool/releases'
 
-print(pyautogui.size())
-common_utils.get_screen_size(1)
+os.startfile('D:\\Workspace\\Git\\MyGithub\\PictureMatchTool\\data')
 
 # ImageGrab.grab((0, 0, window.right, window.bottom)).show('0-0-right-bottom')
 # ImageGrab.grab((window.left, window.top, window.right, window.bottom)).show('0-0-right-bottom')
